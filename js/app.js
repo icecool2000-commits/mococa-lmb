@@ -85,7 +85,11 @@ export function montarApp(ctx) {
       if (aba !== "proxima" && aba !== "torneios" && ts.length > 1) root.append(h("div", { class: "chips", "aria-label": "Temporada" },
         [["todas", "Todas as temporadas"], ...ts.map(t => [String(t), "Temporada " + t])].map(([k, t]) => h("button", { type: "button", "aria-pressed": String(String(temp) === k), onclick: () => { temp = k; ls.set("temp", k); render(); } }, t))));
       if (!carregou.at || !carregou.et) root.append(h("p", { class: "cap", text: "Carregando…" }));
-      else if (aba === "torneios") root.append(torRoot);
+      else if (aba === "torneios") {
+        if (!podeEditar()) root.append(h("p", { class: "cap", text: "Para cadastrar torneios, equipes e placares, toque em \"Entrar como organizador\" ou \"Entrar como editor\" no fim da página." }));
+        else if (!ativos().length) root.append(h("div", { class: "card linha entre" }, h("p", { class: "cap", style: "margin:0", text: "Cadastre primeiro o elenco de Mococa: assim a equipe já entra no torneio com nomes e números." }), h("button", { type: "button", class: "ghost mini", onclick: () => irPara("atletas") }, "Abrir Atletas")));
+        root.append(torRoot);
+      }
       else root.append(aba === "historia" ? telaHistoria() : aba === "proxima" ? telaProxima() : aba === "atletas" ? telaAtletas() : telaStats());
     }
     const cx = caixaPergunta(); if (cx) root.append(cx);
@@ -99,7 +103,7 @@ export function montarApp(ctx) {
     if (!realizadas().length) {
       w.append(h("div", { class: "card col" }, h("h3", { text: "A história começa aqui" }),
         h("p", { class: "cap", text: "Cada etapa da Liga vira um capítulo: quem foi, contra quem jogamos em cada fase, os placares set a set, os destaques e a colocação final. Os números de vitórias, adversários e atletas saem sozinhos daí." }),
-        podeEditar() ? h("p", { class: "cap", text: "Comece cadastrando os atletas (aba Atletas) e depois registre a primeira etapa." }) : h("p", { class: "cap", text: "Ainda não há etapas registradas." }),
+        podeEditar() ? guiaInicio() : h("p", { class: "cap", text: "Ainda não há etapas registradas. Para cadastrar atletas, torneios e etapas, toque em \"Entrar como organizador\" ou \"Entrar como editor\" no fim da página." }),
         podeEditar() && h("div", { class: "linha" }, h("button", { type: "button", onclick: () => novaEtapa("realizada") }, "+ Registrar etapa"), h("button", { type: "button", class: "ghost", onclick: abrirImportar }, "Importar de torneio"),
           !temDemo && h("button", { type: "button", class: "ghost", onclick: () => perguntar("Criar dados de demonstração (12 atletas e 9 etapas fictícias de 2025 e 2026)? Dá para apagar tudo depois com um toque.", criarDemo, "Criar demonstração") }, "Ver com dados de demonstração"))));
       if (temDemo && podeEditar()) w.append(botaoApagarDemo());
@@ -121,6 +125,14 @@ export function montarApp(ctx) {
       lista.forEach(e => w.append(cartaoEtapa(e)));
     });
     return w;
+  }
+  const irPara = k => { aba = k; ls.set("aba", k); atlSel = null; render(); window.scrollTo(0, 0); };
+  function guiaInicio() {
+    const passo = (n, tit, txt, bt, k) => h("div", { class: "passo" }, h("span", { class: "n", text: n }), h("div", null, h("b", { text: tit }), h("p", { class: "cap", text: txt }), bt ? h("button", { type: "button", class: "ghost mini", onclick: () => irPara(k) }, bt) : null));
+    return h("div", { class: "passos" },
+      passo(1, "Elenco de Mococa", atletas.length ? atletas.length + " atletas cadastrados." : "Cadastre os atletas com nome e número.", "Abrir Atletas", "atletas"),
+      passo(2, "Torneio com os adversários", "Na aba Torneios: crie o torneio, cadastre as equipes adversárias, faça o sorteio e marque os placares. Mococa já entra com o elenco. Dá para gerar uma demonstração.", "Abrir Torneios", "torneios"),
+      passo(3, "História", "Depois de cada etapa, use \"Importar de torneio\" para trazer tudo para cá — ou registre a etapa à mão em \"+ Registrar etapa\"."));
   }
   const tile = (rot, val, sub, cls) => h("div", { class: "tile" + (cls ? " " + cls : "") }, h("span", { text: rot }), h("b", { text: val }), sub ? h("small", { text: sub }) : null);
   function botaoApagarDemo() {
@@ -217,7 +229,7 @@ export function montarApp(ctx) {
     const st = C.statsAtletas(atletas, ets).filter(a => a.ativo !== false || a.etapas > 0);
     if (atlSel) { const a = st.find(x => x.id === atlSel); if (a) w.append(detalheAtleta(a, nEt)); }
     if (!atletas.length) {
-      w.append(h("div", { class: "card" }, h("h3", { text: "Elenco" }), h("p", { class: "cap", text: podeEditar() ? "Cadastre os atletas de Mococa abaixo." : "Os atletas ainda não foram cadastrados." })));
+      w.append(h("div", { class: "card" }, h("h3", { text: "Elenco" }), h("p", { class: "cap", text: podeEditar() ? "Cadastre os atletas de Mococa abaixo (nome e número)." : "Os atletas ainda não foram cadastrados. Para cadastrar, toque em \"Entrar como organizador\" ou \"Entrar como editor\" no fim da página." })));
     } else {
       const rk = C.comPosicao([...st].sort((a, b) => b.etapas - a.etapas || b.p - a.p || a.nome.localeCompare(b.nome, "pt-BR")), "etapas");
       w.append(h("div", { class: "card col" }, h("h3", { text: "Ranking de participação" }), h("p", { class: "cap", text: "Quantas etapas cada atleta jogou" + (temp === "todas" ? "" : " em " + temp) + ", de " + nEt + (nEt === 1 ? " etapa" : " etapas") + ". Toque no nome para ver tudo do atleta." }),

@@ -58,6 +58,7 @@
     <span id="ed-quem" hidden></span>
     <button type="button" class="linkish" id="btn-senha" hidden>Trocar senha</button>
     <button type="button" class="linkish" id="btn-logout" hidden>Sair</button>
+    <span class="versao">versão 2026-11-06 · torneios</span>
   </footer>
   <div class="acesso" id="acesso" hidden>
     <form id="form-editor" class="card form" hidden>
@@ -160,7 +161,16 @@ if (!standalone){ const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
   else if (/android/i.test(navigator.userAgent)){ $("install").hidden=false; $("install-text").textContent="No Android: toque em ⋮ no Chrome e depois em \"Adicionar à tela inicial\"."; } }
 window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferred=e; $("install").hidden=false; $("btn-install").hidden=false; $("install-text").textContent="Tenha o Mococa na Liga na tela inicial, como um app."; });
 $("btn-install").onclick = async ()=>{ if(!deferred) return; deferred.prompt(); await deferred.userChoice; deferred=null; $("install").hidden=true; };
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+// atualização automática: procura versão nova ao abrir/voltar ao app e recarrega quando ela assume
+if ("serviceWorker" in navigator) {
+  const tinhaVersao = !!navigator.serviceWorker.controller; let recarregou = false;
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+    const checar = () => reg.update().catch(()=>{});
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checar(); });
+    setInterval(checar, 30 * 60 * 1000);
+  }).catch(()=>{});
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (!tinhaVersao || recarregou) return; recarregou = true; location.reload(); });
+}
 </script>
 </body>
 </html>
