@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mococa na Liga</title>
+<meta name="description" content="Biribol Mococa na Liga Metropolitana: história das etapas, partidas, atletas, ranking e estatísticas da equipe.">
+<meta name="theme-color" content="#040c1b">
+<link rel="stylesheet" href="css/app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="img/icon-192.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mococa LMB">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Figtree:wght@400;500;600;700&display=swap">
+
+</head>
+<body>
+<header class="hero">
+  <span class="admin-pill" id="admin-pill" hidden>Organizador</span>
+  <div class="hero-in">
+    <img src="img/logo.jpg" alt="Escudo do Biribol Mococa na Liga Metropolitana" width="88" height="88">
+    <div>
+      <h1>Biribol Mococa <small>na Liga Metropolitana</small></h1>
+      <p>Nossa história, partidas, atletas e estatísticas</p>
+    </div>
+  </div>
+</header>
+<div class="faixa" aria-hidden="true"></div>
+
+<div class="wrap">
+  <div id="root" class="col"></div>
+
+  <div class="card" id="ed-painel" hidden>
+    <h3>Editores</h3>
+    <p class="cap">Crie um usuário e senha para cada pessoa que vai registrar etapas, partidas e atletas. Os mesmos editores valem nos apps do Biribol, Basquete e da Liga. Remover tira o acesso na hora.</p>
+    <div class="ed-lista" id="ed-lista"></div>
+    <form id="ed-form" class="form">
+      <div class="linha">
+        <input id="ed-nome" placeholder="Nome (ex.: Clayton)" maxlength="30" aria-label="Nome do editor">
+        <input id="ed-usuario" placeholder="Usuário (ex.: clayton)" maxlength="30" autocomplete="off" autocapitalize="none" aria-label="Usuário">
+        <input id="ed-senha" placeholder="Senha (mín. 6)" maxlength="40" autocomplete="new-password" aria-label="Senha do editor">
+      </div>
+      <button type="submit" id="ed-criar">Criar acesso de editor</button>
+    </form>
+  </div>
+
+  <div class="install" id="install" hidden><p><b>Instale o app no celular</b></p><p id="install-text"></p><button type="button" id="btn-install" hidden>Instalar</button></div>
+
+  <footer>
+    <button type="button" class="linkish" id="btn-admin">Entrar como organizador</button>
+    <button type="button" class="linkish" id="btn-editor">Entrar como editor</button>
+    <button type="button" class="linkish" id="btn-editores" hidden>Editores</button>
+    <span id="ed-quem" hidden></span>
+    <button type="button" class="linkish" id="btn-senha" hidden>Trocar senha</button>
+    <button type="button" class="linkish" id="btn-logout" hidden>Sair</button>
+  </footer>
+  <div class="acesso" id="acesso" hidden>
+    <form id="form-editor" class="card form" hidden>
+      <h3>Entrar como editor</h3>
+      <input id="lg-usuario" placeholder="Usuário" autocomplete="username" autocapitalize="none" aria-label="Usuário">
+      <input id="lg-senha" type="password" placeholder="Senha" autocomplete="current-password" aria-label="Senha">
+      <div class="linha"><button type="submit">Entrar</button><button type="button" class="ghost" id="lg-cancelar">Cancelar</button></div>
+    </form>
+    <form id="form-senha" class="card form" hidden>
+      <h3>Trocar minha senha</h3>
+      <input id="nv-senha" type="password" placeholder="Nova senha (mín. 6)" autocomplete="new-password" aria-label="Nova senha">
+      <div class="linha"><button type="submit">Salvar senha</button><button type="button" class="ghost" id="nv-cancelar">Cancelar</button></div>
+    </form>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig, ADMIN_EMAILS } from "./config.js";
+import { montarApp } from "./js/app.js";
+import { DOMINIO, entrarEditor, trocarSenha, criarEditor, ouvirEditores, ouvirSouEditor, removerEditor, usuarioDe } from "./js/acesso.js";
+
+const app = initializeApp(firebaseConfig), auth = getAuth(app);
+let db; try { db = initializeFirestore(app, { localCache: persistentLocalCache() }); } catch (e) { db = initializeFirestore(app, {}); }
+const $ = id => document.getElementById(id);
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.remove("on"),3200); }
+
+let user=null, isAdmin=false, isEditor=false, pararEditor=null, pararLista=null;
+const painel = montarApp({ db, fs:{ collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp }, toast,
+  root:$("root"), podeEditar:()=>isAdmin||isEditor, meuUid:()=>user ? user.uid : null });
+
+/* ---------- login ---------- */
+$("btn-admin").onclick = async ()=>{
+  const prov = new GoogleAuthProvider(); prov.setCustomParameters({prompt:"select_account"});
+  try{ await signInWithPopup(auth, prov); }
+  catch(e){ if (e && (e.code==="auth/popup-blocked" || e.code==="auth/operation-not-supported-in-this-environment")) await signInWithRedirect(auth, prov);
+    else if (e && e.code!=="auth/popup-closed-by-user" && e.code!=="auth/cancelled-popup-request") toast("Não deu para entrar. Tente de novo."); }
+};
+getRedirectResult(auth).catch(()=>{});
+$("btn-logout").onclick = async ()=>{ fecharAcesso(); await signOut(auth); };
+onAuthStateChanged(auth, async u=>{
+  if (pararEditor){ pararEditor(); pararEditor=null; }
+  if (!u){ user=null; isAdmin=false; isEditor=false; atualizar(); try{ await signInAnonymously(auth); }catch(e){ toast("Sem conexão com o servidor."); } return; }
+  user=u; isEditor=false; isAdmin = !u.isAnonymous && ADMIN_EMAILS.includes((u.email||"").toLowerCase());
+  if (!u.isAnonymous && !isAdmin){
+    if ((u.email||"").endsWith(DOMINIO)) pararEditor = ouvirSouEditor(db, u.uid, async ok=>{ if (!ok){ toast("Seu acesso de editor foi removido."); await signOut(auth); return; } isEditor=true; atualizar(); });
+    else { toast("Essa conta não é de organizador."); await signOut(auth); return; }
+  }
+  atualizar();
+});
+function fecharAcesso(){ $("acesso").hidden=true; $("form-editor").hidden=true; $("form-senha").hidden=true; }
+function atualizar(){
+  const ed = isEditor && user && !user.isAnonymous;
+  $("admin-pill").hidden = !(isAdmin||isEditor); $("admin-pill").textContent = isAdmin ? "Organizador" : "Editor";
+  $("btn-admin").hidden = isAdmin||ed; $("btn-editor").hidden = isAdmin||ed;
+  $("btn-logout").hidden = !(isAdmin||ed); $("btn-logout").textContent = isAdmin ? "Sair do modo organizador" : "Sair";
+  $("btn-senha").hidden = !ed; $("ed-quem").hidden = !ed; if (ed) $("ed-quem").textContent = "Editor: " + usuarioDe(user.email);
+  $("btn-editores").hidden = !isAdmin;
+  if (!isAdmin){ $("ed-painel").hidden = true; if (pararLista){ pararLista(); pararLista=null; } }
+  painel.atualizarPermissao();
+}
+$("btn-editor").onclick=()=>{ $("acesso").hidden=false; $("form-senha").hidden=true; $("form-editor").hidden=false; $("lg-usuario").focus(); };
+$("lg-cancelar").onclick=fecharAcesso; $("nv-cancelar").onclick=fecharAcesso;
+$("form-editor").addEventListener("submit", async e=>{ e.preventDefault();
+  try{ await entrarEditor(auth, $("lg-usuario").value, $("lg-senha").value); $("lg-senha").value=""; fecharAcesso(); toast("Bem-vindo! Você pode editar etapas, partidas e atletas."); }
+  catch(err){ toast("Usuário ou senha incorretos."); } });
+$("btn-senha").onclick=()=>{ $("acesso").hidden=false; $("form-editor").hidden=true; $("form-senha").hidden=false; $("nv-senha").focus(); };
+$("form-senha").addEventListener("submit", async e=>{ e.preventDefault();
+  const n=$("nv-senha").value; if (n.length<6){ toast("A senha precisa ter pelo menos 6 caracteres."); return; }
+  try{ await trocarSenha(auth, n); $("nv-senha").value=""; fecharAcesso(); toast("Senha trocada."); }
+  catch(err){ toast(err && err.code==="auth/requires-recent-login" ? "Saia e entre de novo para trocar a senha." : "Não deu para trocar a senha."); } });
+$("btn-editores").onclick=()=>{
+  const p=$("ed-painel"); p.hidden=!p.hidden;
+  if (!p.hidden){ p.scrollIntoView({behavior:"smooth", block:"start"}); if (!pararLista) pararLista = ouvirEditores(db, lista=>{
+    const box=$("ed-lista"); box.textContent="";
+    if (!lista.length){ const x=document.createElement("p"); x.className="cap"; x.textContent="Nenhum editor ainda."; box.append(x); }
+    lista.forEach(ed=>{ const row=document.createElement("div"); row.className="ed-item";
+      const t=document.createElement("div"); const b=document.createElement("b"); b.textContent=ed.nome; const sm=document.createElement("small"); sm.textContent=" · usuário: "+ed.usuario; t.append(b,sm);
+      const rm=document.createElement("button"); rm.type="button"; rm.className="danger mini"; rm.textContent="Remover";
+      let armado=false; rm.onclick=async ()=>{ if(!armado){ armado=true; rm.textContent="Confirmar remoção"; setTimeout(()=>{ armado=false; rm.textContent="Remover"; },4000); return; }
+        try{ await removerEditor(db, ed.uid); toast("Acesso de "+ed.nome+" removido."); }catch(e){ toast("Não deu para remover."); } };
+      row.append(t,rm); box.append(row); }); }); }
+};
+$("ed-form").addEventListener("submit", async e=>{ e.preventDefault();
+  const nome=$("ed-nome").value.trim(), usuario=$("ed-usuario").value, senha=$("ed-senha").value; $("ed-criar").disabled=true;
+  try{ const u = await criarEditor(firebaseConfig, db, { usuario, nome, senha });
+    const texto = "Acesso de editor – Biribol Mococa na Liga\nApp: "+location.origin+location.pathname+"\nNo app: Entrar como editor\nUsuário: "+u+"\nSenha: "+senha+"\n(Troque a senha no primeiro acesso em \"Trocar senha\".)";
+    try{ await navigator.clipboard.writeText(texto); toast("Editor criado. Dados copiados para enviar."); }catch(_){ toast("Editor criado: usuário "+u+"."); }
+    $("ed-nome").value=""; $("ed-usuario").value=""; $("ed-senha").value="";
+  }catch(err){ const c=(err&&(err.code||err.message))||""; toast(c.includes("email-already-in-use")?"Esse usuário já existe.":c.includes("usuario-curto")?"Usuário precisa de pelo menos 3 letras.":c.includes("senha-curta")||c.includes("weak-password")?"Senha precisa ter pelo menos 6 caracteres.":"Não deu para criar o editor."); }
+  $("ed-criar").disabled=false; });
+
+/* ---------- instalar ---------- */
+const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone; let deferred=null;
+if (!standalone){ const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (ios){ $("install").hidden=false; $("install-text").textContent="No iPhone: toque em Compartilhar e depois em \"Adicionar à Tela de Início\"."; }
+  else if (/android/i.test(navigator.userAgent)){ $("install").hidden=false; $("install-text").textContent="No Android: toque em ⋮ no Chrome e depois em \"Adicionar à tela inicial\"."; } }
+window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferred=e; $("install").hidden=false; $("btn-install").hidden=false; $("install-text").textContent="Tenha o Mococa na Liga na tela inicial, como um app."; });
+$("btn-install").onclick = async ()=>{ if(!deferred) return; deferred.prompt(); await deferred.userChoice; deferred=null; $("install").hidden=true; };
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>

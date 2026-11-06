@@ -1,0 +1,16 @@
+# Biribol Mococa na Liga – app do time
+
+- O que é: app (PWA estático no GitHub Pages, repositório `mococa-lmb`, branch main) para acompanhar a equipe de Mococa na Liga Metropolitana de Biribol. Guarda a história de cada etapa: quem jogou, partidas por fase, placares set a set, colocação e medalha. Também tem a lista de confirmação da próxima etapa, o ranking de participação dos atletas e as estatísticas da equipe e dos adversários.
+- Só atletas de Mococa têm estatísticas individuais. Adversários são apenas nomes nas partidas (estatísticas de confronto).
+- Estrutura: `index.html` (topo, login, editores), `js/app.js` (telas), `js/calc.js` (cálculos puros: resultado, colocação, narrativa, estatísticas), `js/demo.js` (dados fictícios), `js/acesso.js` (igual ao dos outros apps), `css/app.css`, `img/` (logo e ícones gerados da logo enviada).
+- Identidade: tema escuro de propósito (diferente do app da Liga). Azul-marinho profundo #040c1b/#0a1731, azul de piscina escurecido #1a679f/#2b86c4, amarelo da bola #e3b90f. Vitória = azul #2f86c8, derrota = vermelho #c4544a, medalhas ouro #d4a514 / prata #a7aeb6 / bronze #c07a3e.
+- Firebase: mesmo projeto `biribol-mococa`. Coleções:
+  - `mococa_atletas/{id}`: `{nome, num, ativo, criado}`.
+  - `mococa_etapas/{id}`: `{nome, temporada, local, data, hora, status: "proxima"|"realizada", atletas:[ids], posGrupo, serie (0 Ouro / 1 Prata / 2 Bronze), posicao (manual), obs, partidas:[...]}`.
+  - Partida: `{id, fase: "grupo"|"serie"|"mata", grupo, rodada, serie, chave: rr|oitavas|quartas|semi|terceiro|final, adversario, sets:[{m,a}] (m = Mococa), wo: null|"m"|"a", stats:{atletaId:{p,b,as}}, obs, ordem}`.
+  - `mococa_etapas/{id}/confirmacoes/{c}`: `{nome, aid, uid, em}`. Qualquer pessoa confirma enquanto a etapa está com status "proxima".
+- Regras: `firestore.rules` é o MESMO arquivo dos apps Biribol, Basquete e LMB (seção "MOCOCA NA LIGA"). Mudou aqui, copie para os outros e publique à mão no console do Firebase.
+- Colocação automática: venceu a final = 1º, perdeu = 2º; disputa de 3º lugar = 3º/4º; senão, a fase em que parou. O campo "Colocação final" na etapa sobrescreve (útil em série de pontos corridos).
+- Editores: os mesmos dos outros apps (coleção `editores`). Organizador: icecool2000@gmail.com.
+- Firestore não aceita undefined nem lista dentro de lista: use `limpar()` antes de salvar; sets ficam como lista de objetos.
+- A cada mudança, subir a versão do cache em `sw.js` (const C).

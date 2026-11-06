@@ -1,0 +1,16 @@
+{
+  "name": "Biribol Mococa na Liga Metropolitana",
+  "short_name": "Mococa LMB",
+  "description": "História, partidas, atletas e estatísticas do Biribol Mococa na Liga Metropolitana de Biribol.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#040c1b",
+  "theme_color": "#040c1b",
+  "lang": "pt-BR",
+  "icons": [
+    {"src": "img/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "img/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "img/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
