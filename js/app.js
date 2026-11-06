@@ -61,7 +61,9 @@ export function montarApp(ctx) {
   }
 
   /* ---------- dados ---------- */
-  onSnapshot(collection(db, COL_AT), s => { atletas = s.docs.map(d => ({ id: d.id, ...d.data() })); carregou.at = true; render(); }, e => console.error(e));
+  let erroLeitura = null;
+  const falhou = (k, e) => { console.error(e); erroLeitura = (e && e.code) || "erro"; carregou[k] = true; render(); };
+  onSnapshot(collection(db, COL_AT), s => { atletas = s.docs.map(d => ({ id: d.id, ...d.data() })); carregou.at = true; erroLeitura = null; render(); }, e => falhou("at", e));
   onSnapshot(collection(db, COL_ET), s => {
     etapas = s.docs.map(d => ({ id: d.id, ...d.data() })).map(e => ({ ...e, partidas: e.partidas || [], atletas: e.atletas || [] }));
     carregou.et = true;
@@ -69,7 +71,7 @@ export function montarApp(ctx) {
     Object.keys(subsConf).forEach(id => { if (!abertas.has(id)) { subsConf[id](); delete subsConf[id]; delete confs[id]; } });
     abertas.forEach(id => { if (!subsConf[id]) subsConf[id] = onSnapshot(collection(db, COL_ET, id, COL_CONF), s2 => { confs[id] = s2.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => msDe(a.em) - msDe(b.em)); render(); }, e => console.error(e)); });
     render();
-  }, e => console.error(e));
+  }, e => falhou("et", e));
 
   /* ---------- tela principal ---------- */
   function render() {
@@ -84,6 +86,7 @@ export function montarApp(ctx) {
       const ts = temporadas();
       if (aba !== "proxima" && aba !== "torneios" && ts.length > 1) root.append(h("div", { class: "chips", "aria-label": "Temporada" },
         [["todas", "Todas as temporadas"], ...ts.map(t => [String(t), "Temporada " + t])].map(([k, t]) => h("button", { type: "button", "aria-pressed": String(String(temp) === k), onclick: () => { temp = k; ls.set("temp", k); render(); } }, t))));
+      if (erroLeitura) root.append(h("div", { class: "card" }, h("p", { class: "cap", style: "margin:0;color:var(--danger)", text: "Não deu para ler os dados (" + erroLeitura + "). Confira a internet e abra o app de novo; se continuar, avise o organizador." })));
       if (!carregou.at || !carregou.et) root.append(h("p", { class: "cap", text: "Carregando…" }));
       else if (aba === "torneios") {
         if (!podeEditar()) root.append(h("p", { class: "cap", text: "Para cadastrar torneios, equipes e placares, toque em \"Entrar como organizador\" ou \"Entrar como editor\" no fim da página." }));
