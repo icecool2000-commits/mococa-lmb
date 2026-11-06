@@ -19,3 +19,4 @@
 - Equipe da casa: `equipeCasa` no ctx do módulo de torneio ("Biribol Mococa" + elenco ativo, com os MESMOS ids do elenco). Novo torneio e demonstração já criam essa equipe com o elenco; na aba Equipes há "Puxar elenco". Assim a importação liga os atletas pelo id.
 - Importar: fonte "Torneios deste app" (mococa_torneios) ou "App da Liga" (lmb_torneios); `origem.col` guarda de onde veio.
 - Ao colar regras no console do Firebase, os blocos `match` precisam ficar DENTRO de `match /databases/{database}/documents { ... }`. Fora dele as regras não valem, a leitura é negada e o app fica em "Carregando…" (já aconteceu).
+- Independente do app da Liga: sem dados lá (ou se a leitura de lmb_torneios falhar), a importação mostra o aviso e leva para Torneios / "+ Registrar etapa". Nada no app pode depender de lmb_torneios para abrir.

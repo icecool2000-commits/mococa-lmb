@@ -509,14 +509,19 @@ export function montarApp(ctx) {
   }
   function trocarFonte(col) {
     if (imp.unsubT) imp.unsubT(); if (imp.unsubJ) imp.unsubJ();
-    Object.assign(imp, { col, torneios: null, tid: null, T: null, jogos: null, ei: 0, eid: null, mapa: {}, unsubT: null, unsubJ: null, salvando: false });
+    Object.assign(imp, { col, indisponivel: false, torneios: null, tid: null, T: null, jogos: null, ei: 0, eid: null, mapa: {}, unsubT: null, unsubJ: null, salvando: false });
     imp.unsubT = onSnapshot(collection(db, col), s => {
       if (!imp || imp.col !== col) return;
       if (!s.docs.length && imp.auto && col === "mococa_torneios") { imp.auto = false; trocarFonte("lmb_torneios"); return; }
       imp.torneios = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.criado || 0) - (a.criado || 0));
       if (!imp.tid && imp.torneios.length) escolherTorneio((imp.torneios.find(t => !t.demo && I.acharMococa(t)) || imp.torneios.find(t => I.acharMococa(t)) || imp.torneios[0]).id);
       else render();
-    }, e => { console.error(e); toast("Não deu para ler os torneios."); });
+    }, e => {
+      // fonte indisponível (ex.: app da Liga fora de uso): segue sem ela, sem travar
+      console.error(e); if (!imp || imp.col !== col) return;
+      if (imp.auto && col === "mococa_torneios") { imp.auto = false; trocarFonte("lmb_torneios"); return; }
+      imp.torneios = []; imp.indisponivel = true; render();
+    });
     render();
   }
   function fecharImportar() { if (imp) { if (imp.unsubT) imp.unsubT(); if (imp.unsubJ) imp.unsubJ(); } imp = null; render(); }
@@ -549,7 +554,12 @@ export function montarApp(ctx) {
       h("p", { class: "cap", text: "Traz uma etapa de um torneio (da aba Torneios deste app ou do app da Liga Metropolitana): as partidas de Mococa (fase, adversário e placar set a set), o grupo, a série e os pontos, bloqueios e assistências dos nossos atletas. Importar de novo a mesma etapa só atualiza as partidas; o que você escreveu à mão continua." }));
     const voltar = h("button", { type: "button", class: "ghost", onclick: fecharImportar }, "Cancelar");
     if (!imp.torneios) { w.append(h("p", { class: "vazio", text: "Lendo os torneios…" }), voltar); return w; }
-    if (!imp.torneios.length) { w.append(h("p", { class: "vazio", text: imp.col === "lmb_torneios" ? "Ainda não há torneios no app da Liga." : "Ainda não há torneios na aba Torneios deste app." }), voltar); return w; }
+    if (!imp.torneios.length) {
+      w.append(h("p", { class: "vazio", text: imp.col === "lmb_torneios" ? (imp.indisponivel ? "O app da Liga não está disponível agora." : "Não há torneios no app da Liga.") + " Sem problema: o Mococa LMB funciona sozinho." : "Ainda não há torneios na aba Torneios deste app." }),
+        h("p", { class: "cap", text: "Para registrar por conta própria: crie o torneio na aba Torneios (equipes, sorteio e placares) e depois importe de \"Torneios deste app\", ou registre a etapa à mão em \"+ Registrar etapa\"." }),
+        h("div", { class: "linha" }, h("button", { type: "button", onclick: () => { fecharImportar(); irPara("torneios"); } }, "Abrir Torneios"), h("button", { type: "button", class: "ghost", onclick: () => { fecharImportar(); novaEtapa("realizada"); } }, "+ Registrar etapa"), voltar));
+      return w;
+    }
     const T = imp.T, eq = T && T.equipes.find(e => e.id === imp.eid);
     w.append(h("label", { class: "lbl" }, "Torneio", h("select", { onchange: ev => escolherTorneio(ev.target.value) }, imp.torneios.map(t => h("option", { value: t.id, selected: t.id === imp.tid }, t.nome || "Torneio")))));
     w.append(h("label", { class: "lbl" }, "Etapa", h("select", { onchange: ev => { imp.ei = +ev.target.value; render(); } }, T.etapas.map((et, i) => {
