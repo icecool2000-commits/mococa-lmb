@@ -2,6 +2,7 @@
 import * as C from "./calc.js";
 import { gerarDemo } from "./demo.js";
 import * as I from "./importar.js";
+import { montarTorneio } from "./torneio.js";
 
 const COL_AT = "mococa_atletas", COL_ET = "mococa_etapas", COL_CONF = "confirmacoes";
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -17,6 +18,14 @@ export function montarApp(ctx) {
   let aba = ls.get("aba") || "historia", temp = ls.get("temp") || "todas", atlSel = null, advSel = null;
   let edEtapa = null, edPartida = null, pergunta = null, ocupado = false, imp = null;
   const subsConf = {};
+  const CASA = "Biribol Mococa";
+
+  // torneios completos (mesmo módulo do app da Liga), guardados em mococa_torneios
+  const torRoot = document.createElement("div"); torRoot.className = "t-col";
+  const torneio = montarTorneio({ db, fs: { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch }, esporte: "biribol", col: "mococa_torneios", maxAtletas: 8, toast,
+    root: torRoot, podeEditar, nomeDemo: "Liga Metropolitana (simulação)", formatoSeries: true,
+    equipeCasa: () => ({ nome: CASA, atletas: [...ativos()].sort((a, b) => (a.num ?? 999) - (b.num ?? 999)) }),
+    marca: { titulo: "Biribol Mococa na Liga", logo: "img/logo.jpg", escura: "#061535", cor: "#1a679f", destaque: "#e3b90f" } });
 
   /* ---------- utilitários ---------- */
   function h(tag, props, ...kids) {
@@ -70,12 +79,13 @@ export function montarApp(ctx) {
     else if (edPartida && podeEditar()) root.append(telaPartida());
     else if (edEtapa && podeEditar()) root.append(telaEtapa());
     else {
-      const abas = [["historia", "História"], ["proxima", "Próxima etapa"], ["atletas", "Atletas"], ["stats", "Estatísticas"]];
+      const abas = [["historia", "História"], ["proxima", "Próxima etapa"], ["torneios", "Torneios"], ["atletas", "Atletas"], ["stats", "Estatísticas"]];
       root.append(h("nav", { class: "abas", role: "tablist" }, abas.map(([k, t]) => h("button", { type: "button", role: "tab", "aria-selected": String(aba === k), onclick: () => { aba = k; ls.set("aba", k); atlSel = null; render(); window.scrollTo(0, 0); } }, t))));
       const ts = temporadas();
-      if (aba !== "proxima" && ts.length > 1) root.append(h("div", { class: "chips", "aria-label": "Temporada" },
+      if (aba !== "proxima" && aba !== "torneios" && ts.length > 1) root.append(h("div", { class: "chips", "aria-label": "Temporada" },
         [["todas", "Todas as temporadas"], ...ts.map(t => [String(t), "Temporada " + t])].map(([k, t]) => h("button", { type: "button", "aria-pressed": String(String(temp) === k), onclick: () => { temp = k; ls.set("temp", k); render(); } }, t))));
       if (!carregou.at || !carregou.et) root.append(h("p", { class: "cap", text: "Carregando…" }));
+      else if (aba === "torneios") root.append(torRoot);
       else root.append(aba === "historia" ? telaHistoria() : aba === "proxima" ? telaProxima() : aba === "atletas" ? telaAtletas() : telaStats());
     }
     const cx = caixaPergunta(); if (cx) root.append(cx);
@@ -90,7 +100,7 @@ export function montarApp(ctx) {
       w.append(h("div", { class: "card col" }, h("h3", { text: "A história começa aqui" }),
         h("p", { class: "cap", text: "Cada etapa da Liga vira um capítulo: quem foi, contra quem jogamos em cada fase, os placares set a set, os destaques e a colocação final. Os números de vitórias, adversários e atletas saem sozinhos daí." }),
         podeEditar() ? h("p", { class: "cap", text: "Comece cadastrando os atletas (aba Atletas) e depois registre a primeira etapa." }) : h("p", { class: "cap", text: "Ainda não há etapas registradas." }),
-        podeEditar() && h("div", { class: "linha" }, h("button", { type: "button", onclick: () => novaEtapa("realizada") }, "+ Registrar etapa"), h("button", { type: "button", class: "ghost", onclick: abrirImportar }, "Importar do app da Liga"),
+        podeEditar() && h("div", { class: "linha" }, h("button", { type: "button", onclick: () => novaEtapa("realizada") }, "+ Registrar etapa"), h("button", { type: "button", class: "ghost", onclick: abrirImportar }, "Importar de torneio"),
           !temDemo && h("button", { type: "button", class: "ghost", onclick: () => perguntar("Criar dados de demonstração (12 atletas e 9 etapas fictícias de 2025 e 2026)? Dá para apagar tudo depois com um toque.", criarDemo, "Criar demonstração") }, "Ver com dados de demonstração"))));
       if (temDemo && podeEditar()) w.append(botaoApagarDemo());
       return w;
@@ -99,15 +109,15 @@ export function montarApp(ctx) {
     w.append(h("div", { class: "card resumo col" },
       h("h3", { text: temp === "todas" ? "Nossa trajetória na Liga" : "Temporada " + temp }),
       h("div", { class: "tiles" },
-        tile("Etapas", S.etapas, ""), tile("Partidas", S.j, S.v + " vitórias · " + S.d + " derrotas"), tile("Aproveitamento", pct(S.aprov), "das partidas", "y")),
+        tile("Etapas", S.etapas, ""), tile("Partidas", S.j, S.v + (S.v === 1 ? " vitória · " : " vitórias · ") + S.d + (S.d === 1 ? " derrota" : " derrotas")), tile("Aproveitamento", pct(S.aprov), "das partidas", "y")),
       h("div", { class: "medalhas" }, [0, 1, 2].map(k => h("span", null, C.MEDALHA[k], h("b", { text: S.medalhas[k] }), " " + C.NOME_MEDALHA[k])))));
-    if (podeEditar()) w.append(h("div", { class: "linha" }, h("button", { type: "button", onclick: () => novaEtapa("realizada") }, "+ Registrar etapa"), h("button", { type: "button", class: "ghost", onclick: abrirImportar }, "Importar do app da Liga"), temDemo && botaoApagarDemo()));
+    if (podeEditar()) w.append(h("div", { class: "linha" }, h("button", { type: "button", onclick: () => novaEtapa("realizada") }, "+ Registrar etapa"), h("button", { type: "button", class: "ghost", onclick: abrirImportar }, "Importar de torneio"), temDemo && botaoApagarDemo()));
     const porAno = {};
     ets.forEach(e => (porAno[C.temporadaDe(e) || "Sem data"] ||= []).push(e));
     Object.keys(porAno).sort((a, b) => String(b).localeCompare(String(a))).forEach(ano => {
       const lista = porAno[ano].sort((a, b) => (b.data || "").localeCompare(a.data || ""));
       const Sa = C.statsEquipe(lista);
-      w.append(h("div", { class: "temporada" }, h("b", { text: ano }), h("small", { class: "cap", text: Sa.etapas + " etapas · " + Sa.v + "V " + Sa.d + "D · " + pct(Sa.aprov) }), h("span")));
+      w.append(h("div", { class: "temporada" }, h("b", { text: ano }), h("small", { class: "cap", text: Sa.etapas + (Sa.etapas === 1 ? " etapa · " : " etapas · ") + Sa.v + "V " + Sa.d + "D · " + pct(Sa.aprov) }), h("span")));
       lista.forEach(e => w.append(cartaoEtapa(e)));
     });
     return w;
@@ -129,7 +139,7 @@ export function montarApp(ctx) {
     const R = C.resumoEtapa(e), ps = C.partidasOrdenadas(e);
     const card = h("article", { class: "card etapa" + (R.medalha ? " m" + R.medalha : "") });
     card.append(h("div", { class: "etapa-top" }, dataBox(e.data), h("div", { class: "col", style: "gap:2px;flex:1" },
-      h("h3", { text: e.nome || "Etapa" }), h("p", { class: "cap", text: [e.local, e.hora, e.origem ? "importada do app da Liga" : ""].filter(Boolean).join(" · ") }))));
+      h("h3", { text: e.nome || "Etapa" }), h("p", { class: "cap", text: [e.local, e.hora, e.origem ? (e.origem.col === "mococa_torneios" ? "importada da aba Torneios" : "importada do app da Liga") : ""].filter(Boolean).join(" · ") }))));
     card.append(h("div", { class: "badges" }, badgeColocacao(R), R.j ? h("span", { class: "badge v", text: R.v + (R.v === 1 ? " vitória" : " vitórias") }) : null, R.j ? h("span", { class: "badge d", text: R.d + (R.d === 1 ? " derrota" : " derrotas") }) : null,
       R.serie != null && !(R.texto || "").includes(C.SERIES[R.serie]) ? h("span", { class: "badge serie" + R.serie, text: C.SERIES[R.serie] }) : null, (e.atletas || []).length ? h("span", { class: "badge", text: e.atletas.length + " atletas" }) : null));
     card.append(h("div", { class: "texto" }, C.narrativa(e, nomeAt).map(t => h("p", { text: t }))));
@@ -477,15 +487,22 @@ export function montarApp(ctx) {
   }
 
   /* ---------- importar do app da Liga ---------- */
+  const FONTES = [["mococa_torneios", "Torneios deste app"], ["lmb_torneios", "App da Liga"]];
   function abrirImportar() {
-    imp = { torneios: null, tid: null, T: null, jogos: null, ei: 0, eid: null, mapa: {}, unsubT: null, unsubJ: null, salvando: false };
-    imp.unsubT = onSnapshot(collection(db, "lmb_torneios"), s => {
-      if (!imp) return;
+    imp = { col: null, auto: true }; trocarFonte("mococa_torneios");
+    render(); window.scrollTo(0, 0);
+  }
+  function trocarFonte(col) {
+    if (imp.unsubT) imp.unsubT(); if (imp.unsubJ) imp.unsubJ();
+    Object.assign(imp, { col, torneios: null, tid: null, T: null, jogos: null, ei: 0, eid: null, mapa: {}, unsubT: null, unsubJ: null, salvando: false });
+    imp.unsubT = onSnapshot(collection(db, col), s => {
+      if (!imp || imp.col !== col) return;
+      if (!s.docs.length && imp.auto && col === "mococa_torneios") { imp.auto = false; trocarFonte("lmb_torneios"); return; }
       imp.torneios = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.criado || 0) - (a.criado || 0));
       if (!imp.tid && imp.torneios.length) escolherTorneio((imp.torneios.find(t => !t.demo && I.acharMococa(t)) || imp.torneios.find(t => I.acharMococa(t)) || imp.torneios[0]).id);
       else render();
-    }, e => { console.error(e); toast("Não deu para ler os torneios da Liga."); });
-    render(); window.scrollTo(0, 0);
+    }, e => { console.error(e); toast("Não deu para ler os torneios."); });
+    render();
   }
   function fecharImportar() { if (imp) { if (imp.unsubT) imp.unsubT(); if (imp.unsubJ) imp.unsubJ(); } imp = null; render(); }
   function escolherTorneio(tid) {
@@ -493,7 +510,7 @@ export function montarApp(ctx) {
     const T = imp.torneios.find(t => t.id === tid); imp.tid = tid; imp.T = T; imp.jogos = null;
     T.equipes = T.equipes || []; T.etapas = T.etapas || [];
     escolherEquipe((I.acharMococa(T) || T.equipes[0] || {}).id || null, false);
-    imp.unsubJ = onSnapshot(collection(db, "lmb_torneios", tid, "jogos"), s => {
+    imp.unsubJ = onSnapshot(collection(db, imp.col, tid, "jogos"), s => {
       if (!imp || imp.tid !== tid) return;
       imp.jogos = s.docs.map(d => ({ id: d.id, ...d.data() }));
       const comJogo = imp.T.etapas.map((_, i) => imp.jogos.some(j => j.etapa === i && (j.a === imp.eid || j.b === imp.eid) && j.status === "encerrado"));
@@ -512,11 +529,12 @@ export function montarApp(ctx) {
     return I.montarEtapa({ ...imp.T, id: imp.tid }, imp.jogos, imp.ei, imp.eid, ids);
   }
   function telaImportar() {
-    const w = h("div", { class: "card form" }, h("h3", { text: "Importar do app da Liga" }),
-      h("p", { class: "cap", text: "Traz uma etapa de um torneio cadastrado no app da Liga Metropolitana: as partidas de Mococa (fase, adversário e placar set a set), o grupo, a série e os pontos, bloqueios e assistências dos nossos atletas. Importar de novo a mesma etapa só atualiza as partidas; o que você escreveu à mão continua." }));
+    const w = h("div", { class: "card form" }, h("h3", { text: "Importar etapa de um torneio" }),
+      h("div", { class: "toggle" }, FONTES.map(([k, t]) => h("button", { type: "button", "aria-pressed": String(imp.col === k), onclick: () => { imp.auto = false; trocarFonte(k); } }, t))),
+      h("p", { class: "cap", text: "Traz uma etapa de um torneio (da aba Torneios deste app ou do app da Liga Metropolitana): as partidas de Mococa (fase, adversário e placar set a set), o grupo, a série e os pontos, bloqueios e assistências dos nossos atletas. Importar de novo a mesma etapa só atualiza as partidas; o que você escreveu à mão continua." }));
     const voltar = h("button", { type: "button", class: "ghost", onclick: fecharImportar }, "Cancelar");
-    if (!imp.torneios) { w.append(h("p", { class: "vazio", text: "Lendo os torneios da Liga…" }), voltar); return w; }
-    if (!imp.torneios.length) { w.append(h("p", { class: "vazio", text: "Ainda não há torneios no app da Liga." }), voltar); return w; }
+    if (!imp.torneios) { w.append(h("p", { class: "vazio", text: "Lendo os torneios…" }), voltar); return w; }
+    if (!imp.torneios.length) { w.append(h("p", { class: "vazio", text: imp.col === "lmb_torneios" ? "Ainda não há torneios no app da Liga." : "Ainda não há torneios na aba Torneios deste app." }), voltar); return w; }
     const T = imp.T, eq = T && T.equipes.find(e => e.id === imp.eid);
     w.append(h("label", { class: "lbl" }, "Torneio", h("select", { onchange: ev => escolherTorneio(ev.target.value) }, imp.torneios.map(t => h("option", { value: t.id, selected: t.id === imp.tid }, t.nome || "Torneio")))));
     w.append(h("label", { class: "lbl" }, "Etapa", h("select", { onchange: ev => { imp.ei = +ev.target.value; render(); } }, T.etapas.map((et, i) => {
@@ -564,6 +582,7 @@ export function montarApp(ctx) {
         } else ids[a.id] = v;
       }
       const r = I.montarEtapa({ ...imp.T, id: imp.tid }, imp.jogos, imp.ei, imp.eid, ids), ex = etapas.find(e => e.id === r.id);
+      r.etapa.origem.col = imp.col;
       const obj = { ...r.etapa, atletas: [...new Set([...(ex ? ex.atletas || [] : []), ...r.atletas])], partidas: [...(ex ? (ex.partidas || []).filter(p => !p.importado) : []), ...r.partidas],
         obs: ex ? ex.obs || "" : "", posicao: ex ? ex.posicao ?? null : null, criado: ex ? ex.criado || Date.now() : Date.now(), importadoEm: Date.now() };
       if (ex && ex.posGrupo != null && obj.posGrupo == null) obj.posGrupo = ex.posGrupo;
@@ -590,5 +609,5 @@ export function montarApp(ctx) {
   }
 
   render();
-  return { atualizarPermissao: render };
+  return { atualizarPermissao: () => { torneio.atualizarPermissao(); render(); } };
 }

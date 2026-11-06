@@ -112,6 +112,14 @@ service cloud.firestore {
     }
 
     // ===== MOCOCA NA LIGA (app do time) =====
+    match /mococa_torneios/{t} {
+      allow read: if true;
+      allow write: if podeTorneio();
+      match /jogos/{j} {
+        allow read: if true;
+        allow write: if podeTorneio();
+      }
+    }
     match /mococa_atletas/{a} {
       allow read: if true;
       allow write: if podeTorneio();

@@ -9,6 +9,8 @@ export const acharMococa = torneio => (torneio.equipes || []).find(e => chaveNom
 export function sugerirMapa(equipe, elenco) {
   const mapa = {};
   (equipe.atletas || []).forEach(a => {
+    const mesmoId = elenco.find(x => x.id === a.id);
+    if (mesmoId) { mapa[a.id] = mesmoId.id; return; }
     const k = chaveNome(a.nome), igual = elenco.find(x => chaveNome(x.nome) === k);
     const pn = k.split(" ")[0], mesmos = elenco.filter(x => chaveNome(x.nome).split(" ")[0] === pn);
     mapa[a.id] = igual ? igual.id : mesmos.length === 1 ? mesmos[0].id : "novo";

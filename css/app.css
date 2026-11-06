@@ -2,7 +2,7 @@
 :root{
   --bg:#040c1b; --surface:#0a1731; --soft:#0f2142; --line:#1b3158; --fg:#e8eef8; --muted:#90a4c4;
   --accent:#1a679f; --accent-hi:#2b86c4; --accent-fg:#ffffff; --navy:#061535; --amarelo:#e3b90f; --amarelo-escuro:#b08d05;
-  --win:#2f86c8; --loss:#c4544a; --ouro:#d4a514; --prata:#a7aeb6; --bronze:#c07a3e; --danger:#e0675d; --ok:#35a36b;
+  --lane:#e3b90f; --hi:#e3b90f; --win:#2f86c8; --loss:#c4544a; --ouro:#d4a514; --prata:#a7aeb6; --bronze:#c07a3e; --danger:#e0675d; --ok:#35a36b;
   --display:"Anton",Impact,"Arial Narrow Bold",sans-serif;
   --body:"Figtree",ui-sans-serif,system-ui,-apple-system,sans-serif;
   color-scheme:dark;
@@ -44,7 +44,7 @@ input:focus-visible,button:focus-visible,select:focus-visible,textarea:focus-vis
 .lbl{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);font-weight:600}
 
 /* abas e filtros */
-.abas{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;background:var(--surface);padding:4px;border-radius:12px;border:1px solid var(--line);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+.abas{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;background:var(--surface);padding:4px;border-radius:12px;border:1px solid var(--line)}
 .abas button{background:transparent;color:var(--muted);padding:9px 4px;font-size:13px;white-space:normal;line-height:1.15}
 .abas button[aria-selected="true"]{background:var(--accent);color:#fff}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -198,3 +198,18 @@ footer{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;font-size:13p
 .install p{margin:0}
 .ed-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
 .ed-lista{margin-bottom:10px}
+
+/* modo torneio (mesmo módulo do app da Liga) no tema escuro */
+.t-abas{background:var(--surface);border:1px solid var(--line)}
+.t-abas button{background:transparent;color:var(--muted)}
+.t-abas button[aria-selected="true"]{background:var(--accent);color:#fff}
+.t-gtit{background:var(--navy);color:#fff}
+.t-gtit::first-letter{color:var(--amarelo)}
+.t-h,.t-titulo{color:var(--amarelo)}
+.t-trofeu{border-color:var(--amarelo);background:#2a2208}
+.t-serie.s0 .t-serie-tit{color:#f0cf62} .t-serie.s1 .t-serie-tit{color:#cfd5dc} .t-serie.s2 .t-serie-tit{color:#e2a46e}
+.t-terc .t-rodtit{color:#e2a46e}
+.t-tab tr.p1 td:first-child{color:var(--ouro)} .t-tab tr.p2 td:first-child{color:var(--prata)} .t-tab tr.p3 td:first-child{color:var(--bronze)}
+.t-modal-sum{background:var(--bg)}
+.abas{grid-template-columns:repeat(5,minmax(0,1fr))}
+.abas button{font-size:12px;padding:9px 2px}

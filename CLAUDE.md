@@ -15,4 +15,6 @@
 - Firestore não aceita undefined nem lista dentro de lista: use `limpar()` antes de salvar; sets ficam como lista de objetos.
 - A cada mudança, subir a versão do cache em `sw.js` (const C).
 - Importar do app da Liga (`js/importar.js`): lê `lmb_torneios/{id}` + `jogos`, acha a equipe com "mococa" no nome, liga atletas pelo nome (ou cria no elenco) e grava a etapa com id `lmb-{torneio}-{etapa}` e `origem`. Partidas importadas têm `importado:true` e id `lmb-{jogo}`; reimportar troca só essas e mantém obs, colocação manual e partidas lançadas à mão.
-- `js/torneio-core.js` é CÓPIA do módulo compartilhado dos apps de torneio (biribol/basquete/lmb). Se mudar lá, copie para cá também.
+- Aba Torneios: o MESMO módulo de torneio do app da Liga (`js/torneio.js`, `js/torneio-core.js`, `js/torneio-demo.js`, `js/exportar.js`, `css/torneio.css` são CÓPIAS dos arquivos compartilhados dos apps biribol/basquete/lmb; se mudar lá, copie para cá). Coleção própria `mococa_torneios/{id}` + `jogos` (não mistura com o app da Liga). Formato da Liga (séries), 8 atletas, demonstração.
+- Equipe da casa: `equipeCasa` no ctx do módulo de torneio ("Biribol Mococa" + elenco ativo, com os MESMOS ids do elenco). Novo torneio e demonstração já criam essa equipe com o elenco; na aba Equipes há "Puxar elenco". Assim a importação liga os atletas pelo id.
+- Importar: fonte "Torneios deste app" (mococa_torneios) ou "App da Liga" (lmb_torneios); `origem.col` guarda de onde veio.

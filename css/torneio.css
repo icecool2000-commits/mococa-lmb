@@ -1,0 +1,179 @@
+/* Modo Torneio e acessos de editor (usa as cores de cada app) */
+.modos{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--soft);padding:4px;border-radius:12px;border:1px solid var(--line)}
+.modos button{background:transparent;color:var(--muted);padding:9px 6px;font-size:14px}
+.modos button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.t-col{display:flex;flex-direction:column;gap:12px}
+.t-topo{display:flex;gap:8px;align-items:center}
+.t-topo select{flex:1}
+.t-topo button{flex:0 0 auto}
+.t-abas{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--soft);padding:4px;border-radius:12px}
+.t-abas button{background:transparent;color:var(--fg);padding:9px 2px;font-size:13px;white-space:normal;line-height:1.15}
+.t-abas button[aria-selected="true"]{background:var(--accent);color:var(--accent-fg)}
+.t-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 12px;min-width:0;display:flex;flex-direction:column;gap:8px;color:var(--fg);text-align:left;font-weight:400;white-space:normal}
+.t-card h3,.t-h{margin:0;font-size:16px;font-weight:600}
+.t-h{font-family:var(--display);font-weight:400;text-transform:uppercase;font-size:19px;letter-spacing:.02em;margin-top:6px}
+.t-titulo{font-family:var(--display);font-weight:400;font-size:22px;text-transform:uppercase;line-height:1.1}
+.t-vazio{align-items:flex-start}
+.t-linha{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.t-linha > *{min-width:0}
+.t-entre{justify-content:space-between;flex-wrap:nowrap}
+.t-form label.t-lbl{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);flex:1 1 140px}
+.t-sub{margin:4px 0 0;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.t-grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px}
+.t-etapas{display:flex;flex-direction:column;gap:8px}
+.t-etapa-form{display:flex;flex-direction:column;gap:6px;padding:10px;border:1px dashed var(--line);border-radius:10px}
+.t-etapa-form .t-linha input{flex:1 1 120px}
+.t-etapa{cursor:pointer;background:var(--surface)}
+.t-etapa:hover{border-color:var(--accent)}
+.t-pill{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.t-pill.and{border-color:var(--lane);color:var(--lane)}
+.t-pill.ok{border-color:var(--ok);color:var(--ok)}
+.t-campeao{font-weight:600}
+.t-mini{padding:6px 10px;font-size:13px}
+.t-eqnome{font-weight:600;flex:1}
+.t-atletas{display:flex;flex-direction:column;gap:6px}
+.t-atleta{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:6px;align-items:center}
+.t-atletas.ro .t-atleta{grid-template-columns:34px minmax(0,1fr)}
+.t-num{text-align:center}
+.t-camisa{display:inline-grid;place-items:center;min-width:28px;height:28px;padding:0 4px;border-radius:8px;background:var(--soft);border:1px solid var(--line);font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
+.t-novo{padding-top:6px;border-top:1px dashed var(--line)}
+.t-grupos{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.t-grupo{padding:0;overflow:hidden;gap:0}
+.t-gtit{background:var(--accent);color:var(--accent-fg);font-family:var(--display);text-transform:uppercase;padding:8px 12px;font-size:16px}
+.t-gl{margin:0;padding:10px 12px 12px 32px;display:flex;flex-direction:column;gap:6px}
+.sorteado{animation:pop .4s ease-out both}
+@keyframes pop{from{transform:scale(.96);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.sorteado{animation:none}}
+.t-tab{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+.t-tab th,.t-tab td{padding:8px 6px;text-align:center;border-top:1px solid var(--line)}
+.t-tab thead th{border-top:0;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.t-tab .l{text-align:left}
+.t-tab tr.passa td{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.t-tab tr.passa td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.t-tab-lg{width:max-content;min-width:100%}
+.t-tab-lg .l{white-space:nowrap;position:sticky;left:0;background:var(--surface);z-index:1;padding-right:12px}
+.t-tab tr.t-subrow th{font-size:10px}
+.t-tab td.saldo.pos{color:var(--ok)} .t-tab td.saldo.neg{color:var(--danger)}
+.t-tab td.vd .v{color:var(--ok);font-weight:600} .t-tab td.vd .d{color:var(--danger);font-weight:600} .t-tab td.vd .e{color:var(--muted)}
+.t-jogos summary{cursor:pointer;font-weight:600;list-style-position:inside}
+.t-jogos[open] summary{margin-bottom:6px}
+.t-jogo{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:center;width:100%;background:var(--soft);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:6px;font-weight:500;white-space:normal}
+.t-jogo:disabled{opacity:.6}
+.t-jogo.vivo{border-color:var(--lane)}
+.t-eq{text-align:left;overflow-wrap:anywhere;line-height:1.2}
+.t-eq.dir{text-align:right}
+.t-eq.venc{font-weight:700}
+.t-eq.perd{color:var(--muted)}
+.t-pl{display:flex;flex-direction:column;align-items:center;min-width:56px}
+.t-pl b{font-family:var(--display);font-weight:400;font-size:18px;white-space:nowrap}
+.t-pl small{font-size:11px;color:var(--muted);white-space:nowrap}
+.t-pl .vivo-txt{color:var(--lane)}
+.t-chave-wrap{overflow-x:auto;padding-bottom:6px}
+.t-chave{display:flex;gap:18px;min-width:max-content;align-items:stretch}
+.t-rod{display:flex;flex-direction:column;width:230px}
+.t-rodtit{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:center;margin-bottom:6px;font-weight:600}
+.t-rodjogos{display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:8px}
+.t-slot{position:relative}
+.t-rod:not(:last-child) .t-slot::after{content:"";position:absolute;right:-18px;top:50%;width:18px;border-top:2px solid var(--line)}
+.t-jogo.compacto{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;margin:0;padding:8px 10px}
+.t-jogo.compacto .t-eq{grid-column:1}
+.t-jogo.compacto .t-eq.dir{text-align:left;grid-row:2}
+.t-jogo.compacto .t-pl{grid-column:2;grid-row:1/3}
+.t-trofeu{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:30px;padding:14px;border:2px solid var(--lane);border-radius:12px;background:var(--soft)}
+.t-trofeu b{font-size:16px}
+.t-manual{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.t-man{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:8px;align-items:center;font-size:14px}
+.t-sortear{font-size:18px;padding:14px}
+.t-modal{position:fixed;inset:0;z-index:30;background:rgb(0 0 0 / .6);display:flex;align-items:center;justify-content:center;padding:16px}
+.t-conf{max-width:420px;width:100%}
+.t-modal-sum{align-items:stretch;padding:0;background:var(--bg)}
+.t-sumula{width:100%;max-width:640px;margin:0 auto;overflow-y:auto;display:flex;flex-direction:column;gap:12px;
+  padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.t-sum-topo{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.t-placar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.t-pe{display:flex;flex-direction:column;gap:2px;min-width:0}
+.t-pe span{font-weight:600;overflow-wrap:anywhere}
+.t-pe b{font-family:var(--display);font-weight:400;font-size:44px;line-height:1}
+.t-pe.venc b{color:var(--lane)}
+.t-x{color:var(--muted)}
+.t-res{text-align:center;margin:0;font-weight:600;color:var(--lane)}
+.t-sets{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+.t-set{display:flex;flex-direction:column;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 12px;color:var(--fg);font-weight:400}
+.t-set.atual{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.t-set small{font-size:11px;color:var(--muted)}
+.t-set b{font-variant-numeric:tabular-nums;font-size:16px}
+.t-pontos{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.t-pcol{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;text-align:center}
+.t-pnum{font-family:var(--display);font-weight:400;font-size:40px;line-height:1}
+.t-pbtn{min-width:64px;font-size:18px;padding:10px}
+.t-centro{text-align:center}
+.t-cron{display:flex;align-items:center;justify-content:center;gap:8px}
+.t-cron b{font-family:var(--display);font-weight:400;font-size:28px;font-variant-numeric:tabular-nums}
+.t-lados button{flex:1}
+.t-cest{margin:0;text-align:center;font-weight:600}
+.t-opts{justify-content:center}
+.t-chk{display:flex;align-items:center;gap:6px;font-size:14px}
+.t-chk input{width:auto}
+.t-satl{display:flex;flex-direction:column;gap:8px}
+.t-sa{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.t-sanome{display:flex;gap:8px;align-items:center;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.t-sanum{display:flex;gap:10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.t-sanum b{color:var(--fg);font-size:15px}
+.t-sabtns{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(60px,1fr));gap:6px}
+.t-sb{padding:10px 4px;font-size:14px}
+.t-sb.sec{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.t-sum-fim{justify-content:center}
+.t-sel-eq{margin:4px 0}
+.t-subnm{color:var(--muted);font-weight:400}
+.t-saldos{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.t-sl{display:grid;grid-template-columns:minmax(0,110px) minmax(0,1fr) 44px;gap:8px;align-items:center;font-size:14px}
+.t-sl .nm{overflow-wrap:anywhere;line-height:1.2}
+.t-sltrk{display:grid;grid-template-columns:1fr 1fr;height:14px;border-left:0}
+.t-sltrk .neg{display:flex;justify-content:flex-end;border-right:2px solid var(--muted)}
+.t-sltrk .neg i{display:block;height:100%;background:var(--danger);border-radius:4px 0 0 4px}
+.t-sltrk .pos i{display:block;height:100%;background:var(--ok);border-radius:0 4px 4px 0}
+.t-sl b{text-align:right;font-variant-numeric:tabular-nums}
+.t-sl b.pos{color:var(--ok)} .t-sl b.neg{color:var(--danger)}
+/* acessos */
+.acesso{display:flex;flex-direction:column;gap:8px;width:100%;max-width:360px;margin:0 auto}
+.acesso form{display:flex;flex-direction:column;gap:8px}
+.ed-lista{display:flex;flex-direction:column;gap:6px}
+.ed-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.ed-item:first-child{border-top:0}
+.ed-item small{color:var(--muted)}
+body.modo-torneio header h1{display:none}
+.t-jogo.bye{opacity:1;border-style:dashed}
+.t-jogo.bye .t-pl b{font-family:var(--body);font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.t-exps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.t-exp{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;white-space:normal;padding:12px;background:var(--soft);color:var(--fg);border:1px solid var(--line)}
+.t-exp b{font-size:14px;line-height:1.2}
+.t-exp small{font-size:12px;color:var(--muted);font-weight:400}
+.t-exp:hover:not(:disabled){border-color:var(--accent)}
+/* 3º lugar, pódio e séries (Ouro / Prata / Bronze) */
+.t-terc{max-width:260px}
+.t-terc .t-rodtit{text-align:left;color:#a5652b}
+.t-terc .t-jogo{border-color:#c8894f}
+.t-podio{display:flex;flex-direction:column;gap:8px}
+.t-podio-l{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.t-podio-l li{display:grid;grid-template-columns:30px 70px minmax(0,1fr);align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:var(--soft);border:1px solid var(--line)}
+.t-podio-l li.p0{border-color:#d4a514}
+.t-podio-l li.p1{border-color:#9ea3a8}
+.t-podio-l li.p2{border-color:#c8894f}
+.t-podio-l li.vazio b{color:var(--muted);font-weight:500}
+.t-medalha{font-size:22px;line-height:1}
+.t-serie{display:flex;flex-direction:column;gap:10px;padding-top:6px}
+.t-serie-tit{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.t-serie-tit small{font-size:12px;font-weight:500;color:var(--muted)}
+.t-serie.s0 .t-serie-tit{color:#a8800c}
+.t-serie.s1 .t-serie-tit{color:#6f757b}
+.t-serie.s2 .t-serie-tit{color:#a5652b}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .t-serie.s0 .t-serie-tit{color:#e6c04a}:root:not([data-theme="light"]) .t-serie.s1 .t-serie-tit{color:#c4c8cc}:root:not([data-theme="light"]) .t-serie.s2 .t-serie-tit{color:#e0a26b}}
+:root[data-theme="dark"] .t-serie.s0 .t-serie-tit{color:#e6c04a}
+:root[data-theme="dark"] .t-serie.s1 .t-serie-tit{color:#c4c8cc}
+:root[data-theme="dark"] .t-serie.s2 .t-serie-tit{color:#e0a26b}
+/* classificação geral e final da etapa */
+.t-tab tr.podio td:first-child{font-weight:700}
+.t-tab tr.p1 td:first-child{color:#b8890b}
+.t-tab tr.p2 td:first-child{color:#7d848b}
+.t-tab tr.p3 td:first-child{color:#a5652b}
+.t-geral td{font-variant-numeric:tabular-nums}
