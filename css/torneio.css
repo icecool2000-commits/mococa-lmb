@@ -177,3 +177,19 @@ body.modo-torneio header h1{display:none}
 .t-tab tr.p2 td:first-child{color:#7d848b}
 .t-tab tr.p3 td:first-child{color:#a5652b}
 .t-geral td{font-variant-numeric:tabular-nums}
+/* montagem manual e fases previstas */
+.t-jogo-ed{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
+.t-jogo-ed .t-mini{margin-top:6px}
+.t-novo-jogo{margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)}
+.t-novo-jogo .t-linha{flex-wrap:nowrap;align-items:center}
+.t-novo-jogo select{flex:1 1 0;min-width:0}
+.t-par{display:grid;grid-template-columns:56px minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:center}
+.t-par select{min-width:0}
+.t-escolha{display:flex;flex-wrap:wrap;gap:6px}
+.t-escolha button{background:var(--soft);color:var(--fg);border:1px solid var(--line);padding:6px 10px;font-size:14px;font-weight:500}
+.t-escolha button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.t-erro{color:var(--danger)}
+.t-jogo.previsto{border-style:dashed;opacity:.8;cursor:default}
+.t-jogo.previsto .t-eq{font-weight:500;color:var(--muted)}
+.t-prev{gap:10px}
+.t-col > label.t-lbl,.t-form > label.t-lbl{flex:0 0 auto}

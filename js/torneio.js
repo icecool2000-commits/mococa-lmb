@@ -15,7 +15,7 @@ export function montarTorneio(ctx) {
 
   let torneios = [], tid = ls.get("tid"), T = null, jogos = [], aba = ls.get("aba") || "geral", etapaSel = 0;
   let unsubJogos = null, sumulaJid = null, sumulaLocal = null, salvarTimer = null, filtroEtapa = "todas", filtroFase = "todas", equipeSel = null;
-  let formNovo = false, editandoGeral = false, sorteioRascunho = null, confirmar = null;
+  let formNovo = false, editandoGeral = false, sorteioRascunho = null, confirmar = null, montagem = null;
 
   /* ---------- utilitários de tela ---------- */
   function h(tag, props, ...kids) {
@@ -214,7 +214,7 @@ export function montarTorneio(ctx) {
       w.append(h("button", { type: "button", class: "t-card t-etapa", onclick: () => { etapaSel = i; aba = "chaves"; ls.set("aba", aba); render(); } },
         h("div", { class: "t-linha t-entre" }, h("b", { text: et.nome }), h("span", { class: "t-pill" + (acabou ? " ok" : js.length ? " and" : ""), text: acabou ? "Encerrada" : js.length ? "Em andamento" : "Sem sorteio" })),
         h("span", { class: "cap", text: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") || "Local, data e horário a definir" }),
-        js.length ? h("span", { class: "cap", text: fin + " de " + js.filter(j => !j.wo).length + " jogos encerrados" }) : null,
+        js.length ? h("span", { class: "cap", text: fin + " de " + js.filter(j => !j.wo).length + " jogos encerrados" }) : (podeEditar() ? h("span", { class: "cap", text: "Toque para montar os grupos, os jogos e as fases" }) : null),
         pods.filter(x => x.p.some(Boolean)).map(x => h("span", { class: "t-campeao" }, x.serie != null ? h("b", { text: x.titulo + ": " }) : null,
           x.p.map((id, k) => id ? (k ? " · " : "") + MED[k] + " " + eqNome(id) : null)))));
     });
@@ -339,8 +339,9 @@ export function montarTorneio(ctx) {
     const et = T.etapas[etapaSel]; if (!et) return w;
     w.append(h("p", { class: "cap", text: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") }));
     const js = jogosEtapa(etapaSel);
+    if (montagem && montagem.ei === etapaSel && podeEditar()) { w.append(telaMontagem(et)); return w; }
     const grp = C.gruposDe(et), temGrupos = grp.length > 0, temMata = js.some(j => j.fase === "mata" && j.serie == null), series = et.series || [], temSeries = series.length > 0;
-    if (!temGrupos && !temMata) { w.append(telaSorteio(et)); return w; }
+    if (!temGrupos && !temMata && !temSeries) { w.append(telaSorteio(et)); return w; }
     const emSeries = et.formato === "series";
     // grupos
     if (temGrupos) {
@@ -360,17 +361,22 @@ export function montarTorneio(ctx) {
       w.append(h("p", { class: "cap", text: (emSeries ? "Em destaque, quem vai para as séries: " + C.SERIES.slice(0, et.classificam || 3).map((s, k) => (k + 1) + "º → " + s).join(", ") + ". " : "Em destaque, quem passa de fase (" + (et.classificam || 2) + (grp.length > 1 ? " por grupo" : "") + "). ") + "Desempate: vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos." }));
       grp.forEach((g, gi) => {
         const jg = js.filter(j => j.fase === "grupo" && j.grupo === gi).sort((a, b) => a.rodada - b.rodada || a.ordem - b.ordem);
-        w.append(h("details", { class: "t-card t-jogos", open: grp.length <= 2 },
+        const editar = podeEditar();
+        w.append(h("details", { class: "t-card t-jogos", open: grp.length <= 2 || !jg.length },
           h("summary", null, "Jogos do grupo " + C.letraGrupo(gi) + " · " + jg.filter(j => j.status === "encerrado").length + "/" + jg.length),
-          jg.map(j => cartaoJogo(j))));
+          jg.map(j => editar && j.status === "agendado" ? h("div", { class: "t-jogo-ed" }, cartaoJogo(j), h("button", { type: "button", class: "ghost t-mini", "aria-label": "Apagar este jogo", title: "Apagar este jogo", onclick: () => perguntar("Apagar o jogo " + eqNome(j.a) + " x " + eqNome(j.b) + "?", () => deleteDoc(jogoRef(j.id)), "Apagar jogo") }, "×")) : cartaoJogo(j)),
+          !jg.length ? h("p", { class: "cap", text: "Nenhum jogo ainda. Escolha os confrontos abaixo." }) : null,
+          editar ? formNovoJogoGrupo(et, gi, g, jg) : null));
       });
       const faltam = js.filter(j => j.fase === "grupo" && j.status !== "encerrado").length;
+      if (!temMata && !temSeries) w.append(previsaoFases(et, grp));
       if (!temMata && !temSeries && podeEditar()) {
         const oQue = emSeries ? "as séries" : "o mata-mata";
         w.append(h("div", { class: "t-card" },
           faltam ? h("p", { class: "cap", text: "Faltam " + faltam + (faltam === 1 ? " jogo" : " jogos") + " da classificação para gerar " + oQue + "." }) : h("p", { class: "cap", text: "Classificação encerrada. Gere " + oQue + " com os classificados." }),
           h("div", { class: "t-linha" },
-            h("button", { type: "button", disabled: !!faltam, onclick: () => emSeries ? gerarSeries(et, etapaSel) : gerarMataMata(et, etapaSel) }, emSeries ? "Gerar séries Ouro, Prata e Bronze" : "Gerar mata-mata"),
+            h("button", { type: "button", disabled: !!faltam, onclick: () => emSeries ? gerarSeries(et, etapaSel) : gerarMataMata(et, etapaSel) }, emSeries ? "Gerar séries pela classificação" : "Gerar mata-mata pela classificação"),
+            h("button", { type: "button", class: "ghost", onclick: () => emSeries ? abrirMontagemSeries(et, etapaSel) : abrirMontagemMata(et, etapaSel, false) }, emSeries ? "Montar séries à mão" : "Montar mata-mata à mão"),
             !js.some(j => j.status === "encerrado" && !j.wo) && h("button", { type: "button", class: "ghost", onclick: () => perguntar("Desfazer o sorteio desta etapa? Os jogos criados serão apagados.", () => desfazerSorteio(etapaSel), "Desfazer sorteio") }, "Desfazer sorteio"))));
       }
     }
@@ -430,10 +436,10 @@ export function montarTorneio(ctx) {
     const placar = BIR ? ((j.sets || []).some(s => s.a || s.b) ? r.sa + " x " + r.sb : "x") : ((j.periodos || []).some(p => p.a || p.b) ? r.pa + " x " + r.pb : "x");
     const det = BIR && j.sets && j.sets.length ? j.sets.filter(s => s.a || s.b).map(s => s.a + "-" + s.b).join(" · ") : "";
     const cls = n => (fim && r.venc === n ? "venc" : fim && r.venc && r.venc !== n ? "perd" : "");
-    return h("button", { type: "button", class: "t-jogo" + (compacto ? " compacto" : "") + (j.status === "andamento" ? " vivo" : "") + (j.wo ? " bye" : ""), disabled: !j.a || !j.b, onclick: () => abrirSumula(j.id) },
-      h("span", { class: "t-eq " + cls(j.a), text: j.a ? eqNome(j.a) : "A definir" }),
+    return h("button", { type: "button", class: "t-jogo" + (compacto ? " compacto" : "") + (j.status === "andamento" ? " vivo" : "") + (j.wo ? " bye" : "") + (j.previsto ? " previsto" : ""), disabled: j.previsto || !j.a || !j.b, onclick: () => abrirSumula(j.id) },
+      h("span", { class: "t-eq " + cls(j.a), text: j.a ? eqNome(j.a) : (j.rotA || "A definir") }),
       h("span", { class: "t-pl" }, h("b", { text: j.wo ? "bye" : placar }), det && h("small", { text: det }), j.status === "andamento" && h("small", { class: "vivo-txt", text: "ao vivo" }), r.empate && h("small", { text: "empate" })),
-      h("span", { class: "t-eq dir " + cls(j.b), text: j.wo ? "—" : j.b ? eqNome(j.b) : "A definir" }));
+      h("span", { class: "t-eq dir " + cls(j.b), text: j.wo ? "—" : j.b ? eqNome(j.b) : (j.rotB || "A definir") }));
   }
 
   function chaveMata(todos) {
@@ -478,12 +484,16 @@ export function montarTorneio(ctx) {
       series && h("label", { class: "t-lbl" }, "Disputa dentro de cada série", h("select", { onchange: e => { rs.disputaSeries = e.target.value; render(); } },
         h("option", { value: "auto", selected: rs.disputaSeries !== "todos" }, "Automática: 2 equipes = final · 3 = todos contra todos · 4 ou mais = mata-mata (semifinal, final e 3º lugar)"),
         h("option", { value: "todos", selected: rs.disputaSeries === "todos" }, "Sempre todos contra todos (pontos corridos)"))),
-      rs.nGrupos > 0 && h("div", { class: "chips" },
+      rs.nGrupos > 0 && h("div", { class: "t-lbl" }, "Quem fica em cada grupo", h("div", { class: "chips" },
         h("button", { type: "button", "aria-pressed": String(rs.modo === "auto"), onclick: () => { rs.modo = "auto"; rs.grupos = null; render(); } }, "Sorteio automático"),
-        h("button", { type: "button", "aria-pressed": String(rs.modo === "manual"), onclick: () => { rs.modo = "manual"; rs.grupos = null; render(); } }, "Manual (sorteio feito fora)"))));
+        h("button", { type: "button", "aria-pressed": String(rs.modo === "manual"), onclick: () => { rs.modo = "manual"; rs.grupos = null; render(); } }, "Manual: eu escolho os grupos"))),
+      rs.nGrupos > 0 && h("div", { class: "t-lbl" }, "Jogos dentro dos grupos", h("div", { class: "chips" },
+        h("button", { type: "button", "aria-pressed": String(rs.confrontos !== "manual"), onclick: () => { rs.confrontos = "auto"; render(); } }, "Todos contra todos (automático)"),
+        h("button", { type: "button", "aria-pressed": String(rs.confrontos === "manual"), onclick: () => { rs.confrontos = "manual"; render(); } }, "Eu escolho quem joga contra quem")))));
     if (rs.nGrupos === 0) {
-      w.append(h("div", { class: "t-card" }, h("p", { class: "cap", text: "Mata-mata direto: a ordem de cadastro das equipes vira a ordem das cabeças de chave (1ª x última...). Equipes sobrando ganham bye." }),
-        h("button", { type: "button", onclick: () => gerarMataDireto(etapaSel) }, "Gerar chave do mata-mata")));
+      w.append(h("div", { class: "t-card" }, h("p", { class: "cap", text: "Mata-mata direto: no automático, a ordem de cadastro das equipes vira a ordem das cabeças de chave (1ª x última...) e quem sobra ganha bye. À mão, você escolhe cada confronto." }),
+        h("div", { class: "t-linha" }, h("button", { type: "button", onclick: () => gerarMataDireto(etapaSel) }, "Gerar chave automática"), h("button", { type: "button", class: "ghost", onclick: () => abrirMontagemMata(et, etapaSel, true) }, "Montar chave à mão"),
+          SERIES_OK && h("button", { type: "button", class: "ghost", onclick: () => abrirMontagemSeries(et, etapaSel) }, "Montar séries Ouro, Prata e Bronze à mão"))));
       return w;
     }
     if (rs.modo === "manual") {
@@ -505,7 +515,7 @@ export function montarTorneio(ctx) {
       w.append(h("h3", { class: "t-h", text: rs.modo === "auto" ? "Resultado do sorteio" : "Grupos montados" }));
       w.append(h("div", { class: "t-grupos" }, rs.grupos.map((g, gi) => h("div", { class: "t-card t-grupo sorteado" }, h("div", { class: "t-gtit" }, "Grupo " + C.letraGrupo(gi)), h("ol", { class: "t-gl" }, g.map(id => h("li", { text: eqNome(id) })))))));
       w.append(h("div", { class: "t-linha" },
-        h("button", { type: "button", onclick: () => confirmarSorteio(etapaSel, rs) }, "Confirmar e criar os jogos"),
+        h("button", { type: "button", onclick: () => confirmarSorteio(etapaSel, rs) }, rs.confrontos === "manual" ? "Confirmar grupos (escolho os jogos depois)" : "Confirmar e criar os jogos"),
         rs.modo === "auto" && h("button", { type: "button", class: "ghost", onclick: () => { rs.grupos = C.distribuir(C.embaralhar(T.equipes.map(e => e.id)), rs.nGrupos); render(); } }, "Sortear de novo")));
     }
     return w;
@@ -513,12 +523,146 @@ export function montarTorneio(ctx) {
 
   async function confirmarSorteio(ei, rs) {
     const b = writeBatch(db);
-    rs.grupos.forEach((g, gi) => C.todosContraTodos(g).forEach((par, r) => par.forEach(([a, bb], o) => {
+    if (rs.confrontos !== "manual") rs.grupos.forEach((g, gi) => C.todosContraTodos(g).forEach((par, r) => par.forEach(([a, bb], o) => {
       const id = C.uid("j"); b.set(jogoRef(id), novoJogo({ etapa: ei, fase: "grupo", grupo: gi, rodada: r + 1, ordem: o, a, b: bb, faseNome: "Grupo " + C.letraGrupo(gi) }));
     })));
     const etapas = T.etapas.map((e, i) => i === ei ? { ...e, grupos: C.gruposParaSalvar(rs.grupos), classificam: rs.classificam, sorteio: rs.modo, formato: rs.formato === "series" && rs.grupos.length >= 2 ? "series" : "mata", disputaSeries: rs.disputaSeries || "auto", series: [] } : e);
     b.update(ref(), { etapas });
-    try { await b.commit(); sorteioRascunho = null; toast("Grupos e jogos criados."); } catch (e) { console.error(e); toast("Não deu para salvar o sorteio."); }
+    try { await b.commit(); sorteioRascunho = null; toast(rs.confrontos === "manual" ? "Grupos criados. Agora escolha os jogos de cada grupo." : "Grupos e jogos criados."); } catch (e) { console.error(e); toast("Não deu para salvar o sorteio."); }
+  }
+
+  /* ---------- montagem manual: jogos de grupo, mata-mata e séries ---------- */
+  function formNovoJogoGrupo(et, gi, g, jg) {
+    let a = "", b = "";
+    const sel = (v, set, rot) => h("select", { "aria-label": rot, onchange: e => set(e.target.value) }, h("option", { value: "" }, rot), g.map(id => h("option", { value: id }, eqNome(id))));
+    return h("div", { class: "t-novo-jogo" }, h("span", { class: "cap", text: "Novo jogo no grupo " + C.letraGrupo(gi) + ":" }),
+      h("div", { class: "t-linha" }, sel(a, v => a = v, "Equipe A"), h("span", { text: "x" }), sel(b, v => b = v, "Equipe B"),
+        h("button", { type: "button", class: "t-mini", onclick: async () => {
+          if (!a || !b || a === b) { toast("Escolha duas equipes diferentes."); return; }
+          const rod = Math.max(0, ...jg.map(j => j.rodada || 0)) + 1;
+          await setDoc(jogoRef(C.uid("j")), novoJogo({ etapa: etapaSel, fase: "grupo", grupo: gi, rodada: rod, ordem: 0, a, b, faseNome: "Grupo " + C.letraGrupo(gi) }));
+          toast("Jogo criado: " + eqNome(a) + " x " + eqNome(b) + ".");
+        } }, "+ Jogo")));
+  }
+
+  // fases seguintes já visíveis antes de existirem (vagas "1º do grupo A"...)
+  function previsaoFases(et, grp) {
+    const emSeries = et.formato === "series", w = h("div", { class: "t-col t-prev" }, h("h3", { class: "t-h", text: "Próximas fases (previstas)" }),
+      h("p", { class: "cap", text: "Estrutura que será disputada depois dos grupos. Os nomes entram quando a fase for gerada (pela classificação ou à mão)." }));
+    let n = 0; const id = () => "prev-" + (n++);
+    const chavePrev = (qual, pre) => {
+      const est = C.estruturaChave(qual, id), js = [];
+      est.rodadas.forEach((rod, ri) => rod.forEach(m => js.push({ id: m.id, previsto: true, rodada: m.rodada, ordem: m.ordem, faseNome: pre + C.nomeFase(rod.length), status: "agendado",
+        rotA: ri === 0 ? (m.x || m.y || {}).rot : "Vencedor", rotB: ri === 0 ? (m.x && m.y ? m.y.rot : "passa direto") : "Vencedor" })));
+      if (est.terceiro) js.push({ id: est.terceiro.id, previsto: true, perd: est.terceiro.perd, rodada: est.terceiro.rodada, ordem: 1, faseNome: pre ? pre + "3º lugar" : C.TERCEIRO, status: "agendado", rotA: "Perdedor semifinal", rotB: "Perdedor semifinal" });
+      return chaveMata(js);
+    };
+    if (emSeries) {
+      const q = Math.min(3, et.classificam || 3);
+      for (let p = 0; p < q; p++) {
+        const qual = grp.map((_, gi) => ({ rot: (p + 1) + "º do grupo " + C.letraGrupo(gi), grupo: null }));
+        const tipo = et.disputaSeries === "todos" && qual.length >= 3 ? "todos" : C.tipoSerie(qual.length);
+        const card = h("section", { class: "t-serie s" + p }, h("h3", { class: "t-h t-serie-tit" }, h("span", { class: "t-medalha m" + p, text: MED[p] }), C.SERIES[p], h("small", { text: qual.length + " vagas · " + (tipo === "todos" ? "todos contra todos" : tipo === "final" ? "final" : "mata-mata com 3º lugar") })));
+        if (tipo === "todos") card.append(h("div", { class: "t-card" }, h("ol", { class: "t-gl" }, qual.map(x => h("li", { text: x.rot })))));
+        else card.append(chavePrev(qual, C.SERIES[p] + " · "));
+        w.append(card);
+      }
+    } else {
+      const q = et.classificam || 2, qual = [];
+      for (let p = 1; p <= q; p++) grp.forEach((_, gi) => qual.push({ rot: p + "º do grupo " + C.letraGrupo(gi), grupo: gi, pos: p }));
+      if (qual.length >= 2) w.append(chavePrev(qual, ""));
+    }
+    return w;
+  }
+
+  const NJOGOS = [[1, "Final (2 equipes)"], [2, "Semifinal (até 4)"], [4, "Quartas de final (até 8)"], [8, "Oitavas de final (até 16)"], [16, "16 avos (até 32)"]];
+  const paresDe = qual => C.primeiraRodada(qual).map(([x, y]) => [x ? x.eid : null, y ? y.eid : null]);
+  function novaChave(eids) { const pares = eids.length >= 2 ? paresDe(eids.map(eid => ({ eid, grupo: null }))) : [[null, null]]; return { nJogos: pares.length, pares }; }
+  function ajustarChave(ch, n) { while (ch.pares.length < n) ch.pares.push([null, null]); ch.pares = ch.pares.slice(0, n); ch.nJogos = n; }
+  function errosChave(ch) {
+    const usados = ch.pares.flat().filter(Boolean);
+    if (usados.length < 2) return "Escolha pelo menos 2 equipes.";
+    if (new Set(usados).size !== usados.length) return "Uma equipe aparece em mais de um jogo.";
+    if (ch.pares.some(([a, b]) => !a && !b)) return "Todo jogo da 1ª rodada precisa ter pelo menos uma equipe (sem adversário = passa direto).";
+    return "";
+  }
+  function editorChave(ch, candidatos) {
+    const usados = new Set(ch.pares.flat().filter(Boolean));
+    const sel = (pi, lado) => h("select", { "aria-label": "Jogo " + (pi + 1) + (lado ? " equipe B" : " equipe A"), onchange: e => { ch.pares[pi][lado] = e.target.value || null; render(); } },
+      h("option", { value: "" }, lado ? "— (passa direto)" : "—"), candidatos.map(id => h("option", { value: id, selected: ch.pares[pi][lado] === id }, eqNome(id) + (usados.has(id) && ch.pares[pi][lado] !== id ? " ✓" : ""))));
+    const err = errosChave(ch);
+    return h("div", { class: "t-col" },
+      h("label", { class: "t-lbl" }, "1ª rodada", h("select", { onchange: e => { ajustarChave(ch, +e.target.value); render(); } }, NJOGOS.map(([n, t]) => h("option", { value: n, selected: ch.nJogos === n }, t)))),
+      ch.pares.map((p, pi) => h("div", { class: "t-par" }, h("span", { class: "cap", text: "Jogo " + (pi + 1) }), sel(pi, 0), h("span", { text: "x" }), sel(pi, 1))),
+      h("p", { class: "cap" + (err ? " t-erro" : ""), text: err || "As fases seguintes, a final e a disputa de 3º lugar são criadas sozinhas. ✓ = equipe já escolhida em outro jogo." }));
+  }
+
+  function classifAtual(et, ei, q) {
+    const js = jogosEtapa(ei);
+    return C.gruposDe(et).map((g, gi) => C.classificacao(esporte, g, js.filter(j => j.fase === "grupo" && j.grupo === gi), eqNome).slice(0, q));
+  }
+  function abrirMontagemMata(et, ei, direto) {
+    const qual = direto ? T.equipes.map((e, i) => ({ eid: e.id, grupo: null, pos: i + 1 })) : C.ordenarQualificados(classifAtual(et, ei, et.classificam || 2));
+    const pares = paresDe(qual);
+    montagem = { ei, tipo: "mata", direto, chave: { nJogos: pares.length, pares } }; render();
+  }
+  function abrirMontagemSeries(et, ei) {
+    const q = Math.min(3, et.classificam || 3), temG = C.gruposDe(et).length > 0;
+    const base = temG ? C.montarSeries(classifAtual(et, ei, q), q, et.disputaSeries === "todos") : [];
+    const nS = temG ? Math.max(1, base.length) : 3;
+    montagem = { ei, tipo: "series", series: Array.from({ length: nS }, (_, si) => { const s = base[si] || { equipes: [], tipo: "mata" };
+      return { tipo: s.tipo === "todos" ? "todos" : "mata", equipes: [...s.equipes], chave: novaChave(s.equipes) }; }) };
+    render();
+  }
+  function telaMontagem(et) {
+    const m = montagem, todos = T.equipes.map(e => e.id), w = h("div", { class: "t-col" });
+    const cancelar = h("button", { type: "button", class: "ghost", onclick: () => { montagem = null; render(); } }, "Cancelar");
+    if (m.tipo === "mata") {
+      w.append(h("div", { class: "t-card t-form" }, h("h3", { text: "Montar o mata-mata à mão" }),
+        h("p", { class: "cap", text: "Escolha quantos jogos tem a 1ª rodada e quem joga contra quem. Veio preenchido com a sugestão pela classificação; troque o que quiser." }),
+        editorChave(m.chave, todos),
+        h("div", { class: "t-linha" }, h("button", { type: "button", disabled: !!errosChave(m.chave), onclick: salvarMontagemMata }, "Criar mata-mata"), cancelar)));
+      return w;
+    }
+    w.append(h("div", { class: "t-card t-form" }, h("h3", { text: "Montar as séries à mão" }),
+      h("p", { class: "cap", text: "Escolha as equipes de cada série e como ela é disputada. Veio preenchido com a sugestão pela classificação dos grupos (1ºs na Ouro, 2ºs na Prata, 3ºs na Bronze)." }),
+      h("label", { class: "t-lbl" }, "Quantas séries", h("select", { onchange: e => { const n = +e.target.value; while (m.series.length < n) m.series.push({ tipo: "mata", equipes: [], chave: novaChave([]) }); m.series = m.series.slice(0, n); render(); } },
+        [1, 2, 3].map(n => h("option", { value: n, selected: m.series.length === n }, n + (n === 1 ? " série (Ouro)" : n === 2 ? " séries (Ouro e Prata)" : " séries (Ouro, Prata e Bronze)")))))));
+    const emOutra = (si, id) => m.series.some((s, k) => k !== si && (s.tipo === "todos" ? s.equipes : s.chave.pares.flat()).includes(id));
+    m.series.forEach((s, si) => {
+      const card = h("section", { class: "t-serie s" + si }, h("h3", { class: "t-h t-serie-tit" }, h("span", { class: "t-medalha m" + si, text: MED[si] }), C.SERIES[si]));
+      const corpo = h("div", { class: "t-card t-form" },
+        h("div", { class: "chips" }, [["mata", "Mata-mata (com 3º lugar)"], ["todos", "Todos contra todos"]].map(([k, t]) => h("button", { type: "button", "aria-pressed": String(s.tipo === k), onclick: () => {
+          if (k === s.tipo) return; if (k === "todos") s.equipes = s.chave.pares.flat().filter(Boolean); else s.chave = novaChave(s.equipes); s.tipo = k; render(); } }, t))));
+      if (s.tipo === "todos") corpo.append(h("div", { class: "t-escolha" }, todos.map(id => h("button", { type: "button", "aria-pressed": String(s.equipes.includes(id)), disabled: emOutra(si, id) && !s.equipes.includes(id),
+        onclick: () => { s.equipes = s.equipes.includes(id) ? s.equipes.filter(x => x !== id) : [...s.equipes, id]; render(); } }, eqNome(id)))),
+        h("p", { class: "cap", text: s.equipes.length + " equipes" + (s.equipes.length < 2 ? " · escolha pelo menos 2" : "") }));
+      else corpo.append(editorChave(s.chave, todos.filter(id => !emOutra(si, id) || s.chave.pares.flat().includes(id))));
+      card.append(corpo); w.append(card);
+    });
+    const ok = m.series.every(s => s.tipo === "todos" ? s.equipes.length >= 2 : !errosChave(s.chave));
+    w.append(h("div", { class: "t-linha" }, h("button", { type: "button", disabled: !ok, onclick: salvarMontagemSeries }, "Criar séries"), cancelar));
+    return w;
+  }
+  async function salvarMontagemMata() {
+    const m = montagem, b = writeBatch(db);
+    jogosChave(m.ei, null, { pares: m.chave.pares }).forEach(j => { const { id, ...d } = j; b.set(jogoRef(id), d); });
+    if (m.direto) b.update(ref(), { etapas: T.etapas.map((e, i) => i === m.ei ? { ...e, sorteio: "manual" } : e) });
+    try { await b.commit(); montagem = null; toast("Mata-mata criado."); render(); } catch (e) { console.error(e); toast("Não deu para criar o mata-mata."); }
+  }
+  async function salvarMontagemSeries() {
+    const m = montagem, b = writeBatch(db), series = [];
+    m.series.forEach((s, si) => {
+      if (s.tipo === "todos") {
+        series.push({ equipes: s.equipes, tipo: "todos" });
+        C.todosContraTodos(s.equipes).forEach((par, r) => par.forEach(([a, bb], o) => b.set(jogoRef(C.uid("j")), novoJogo({ etapa: m.ei, fase: "serie", serie: si, rodada: r + 1, ordem: o, a, b: bb, faseNome: C.SERIES[si] }))));
+      } else {
+        series.push({ equipes: s.chave.pares.flat().filter(Boolean), tipo: s.chave.nJogos === 1 ? "final" : "mata" });
+        jogosChave(m.ei, null, { pares: s.chave.pares, serie: si, prefixo: C.SERIES[si] + " · " }).forEach(j => { const { id, ...d } = j; b.set(jogoRef(id), d); });
+      }
+    });
+    b.update(ref(), { etapas: T.etapas.map((e, i) => i === m.ei ? { ...e, series, formato: "series" } : e) });
+    try { await b.commit(); montagem = null; toast("Séries criadas."); render(); } catch (e) { console.error(e); toast("Não deu para criar as séries."); }
   }
 
   async function desfazerSorteio(ei) {
@@ -541,7 +685,9 @@ export function montarTorneio(ctx) {
   }
   // jogos de uma chave (com bye e disputa de 3º lugar). extra: { serie, prefixo }
   function jogosChave(ei, qual, extra = {}) {
-    const est = C.estruturaChave(qual, () => C.uid("j")), pre = extra.prefixo || "", base = extra.serie != null ? { serie: extra.serie } : {};
+    const novoId = () => C.uid("j");
+    const est = extra.pares ? C.estruturaDePares(extra.pares.map(([a, b]) => [a ? { eid: a } : null, b ? { eid: b } : null]), novoId) : C.estruturaChave(qual, novoId);
+    const pre = extra.prefixo || "", base = extra.serie != null ? { serie: extra.serie } : {};
     const lista = [];
     est.rodadas.forEach((rod, ri) => rod.forEach(m => {
       const fase = pre + C.nomeFase(rod.length);

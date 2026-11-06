@@ -193,8 +193,10 @@ export const faseEstat = j => j.fase === "grupo" ? "Classificação" : j.serie !
 
 // Estrutura do mata-mata a partir dos classificados (qualquer objeto com .grupo).
 // rodadas: [[{id, rodada, ordem, x, y, bye, de}]]; terceiro: jogo dos perdedores das semifinais (se houver semifinal real)
-export function estruturaChave(qual, novoId) {
-  const pares = primeiraRodada(qual), rodadas = [];
+export function estruturaChave(qual, novoId) { return estruturaDePares(primeiraRodada(qual), novoId); }
+// mesma estrutura a partir de confrontos escolhidos à mão: pares = [[x|null, y|null]] (quantidade potência de 2)
+export function estruturaDePares(pares, novoId) {
+  const rodadas = [];
   let ant = pares.map(([x, y], o) => ({ id: novoId(), rodada: 1, ordem: o, x, y, bye: !(x && y) }));
   rodadas.push(ant);
   let r = 1;
@@ -321,3 +323,5 @@ export function classificacaoGeral(esporte, T, jogos, nomeDe = id => id, pontuac
   if (pontuacao) linhas.sort((a, b) => b.pts - a.pts || b.v - a.v || b.e - a.e || b.saldo - a.saldo || b.pf - a.pf);
   return { linhas, porEtapa };
 }
+
+export const potencia2 = n => n >= 1 && (n & (n - 1)) === 0;
