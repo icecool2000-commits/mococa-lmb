@@ -14,3 +14,5 @@
 - Editores: os mesmos dos outros apps (coleção `editores`). Organizador: icecool2000@gmail.com.
 - Firestore não aceita undefined nem lista dentro de lista: use `limpar()` antes de salvar; sets ficam como lista de objetos.
 - A cada mudança, subir a versão do cache em `sw.js` (const C).
+- Importar do app da Liga (`js/importar.js`): lê `lmb_torneios/{id}` + `jogos`, acha a equipe com "mococa" no nome, liga atletas pelo nome (ou cria no elenco) e grava a etapa com id `lmb-{torneio}-{etapa}` e `origem`. Partidas importadas têm `importado:true` e id `lmb-{jogo}`; reimportar troca só essas e mantém obs, colocação manual e partidas lançadas à mão.
+- `js/torneio-core.js` é CÓPIA do módulo compartilhado dos apps de torneio (biribol/basquete/lmb). Se mudar lá, copie para cá também.

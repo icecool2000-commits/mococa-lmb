@@ -4,8 +4,8 @@
 export const SERIES = ["Série Ouro", "Série Prata", "Série Bronze"];
 export const MEDALHA = ["🥇", "🥈", "🥉"];
 export const NOME_MEDALHA = ["ouro", "prata", "bronze"];
-export const CHAVES = { rr: "Todos contra todos", oitavas: "Oitavas de final", quartas: "Quartas de final", semi: "Semifinal", terceiro: "Disputa de 3º lugar", final: "Final" };
-const ORDEM_CHAVE = { rr: 10, oitavas: 20, quartas: 30, semi: 40, terceiro: 50, final: 60 };
+export const CHAVES = { rr: "Todos contra todos", dezesseis: "16 avos de final", oitavas: "Oitavas de final", quartas: "Quartas de final", semi: "Semifinal", terceiro: "Disputa de 3º lugar", final: "Final" };
+const ORDEM_CHAVE = { rr: 10, dezesseis: 15, oitavas: 20, quartas: 30, semi: 40, terceiro: 50, final: 60 };
 
 export const uid = (p = "") => p + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
 export const fmtData = s => { if (!s) return ""; const [y, m, d] = s.split("-"); return d + "/" + m + "/" + y; };
@@ -55,7 +55,7 @@ export function colocacao(e) {
     else if (ter) { pos = resultado(ter).venceu ? 3 : 4; texto = pos + "º lugar" + naSerie; }
     else {
       const ult = [...ko].reverse().find(p => p.chave && p.chave !== "rr" && resultado(p).venceu === false);
-      if (ult) texto = "Parou " + ({ semi: "na semifinal", quartas: "nas quartas de final", oitavas: "nas oitavas de final" })[ult.chave] + naSerie;
+      if (ult) texto = "Parou " + ({ semi: "na semifinal", quartas: "nas quartas de final", oitavas: "nas oitavas de final", dezesseis: "nos 16 avos de final" })[ult.chave] + naSerie;
       else if (serie != null) texto = "Disputou a " + SERIES[serie];
       else if (ps.length) texto = "Fase de grupos";
     }
@@ -83,7 +83,7 @@ export function narrativa(e, nomeAt) {
   const ps = partidasOrdenadas(e), out = [], R = resumoEtapa(e);
   const quem = (e.atletas || []).map(nomeAt).filter(Boolean);
   const onde = [e.local, fmtData(e.data)].filter(Boolean).join(", ");
-  out.push((e.nome || "Etapa") + (onde ? " – " + onde : "") + "." + (quem.length ? " Mococa foi com " + quem.length + " atletas: " + listaPt(quem) + "." : ""));
+  out.push((e.nome || "Etapa") + (onde ? " – " + onde : "") + "." + (quem.length ? " Mococa foi com " + quem.length + " atletas: " + listaPt(quem).replace(/\.$/, "") + "." : ""));
   const gr = ps.filter(p => p.fase === "grupo");
   if (gr.length) {
     const g = gr.find(p => p.grupo) || {};
@@ -97,7 +97,7 @@ export function narrativa(e, nomeAt) {
   const ko = ps.filter(p => p.fase !== "grupo");
   if (ko.length) {
     const pref = R.serie != null ? "Na " + SERIES[R.serie] + ": " : "No mata-mata: ";
-    const em = { oitavas: "nas oitavas", quartas: "nas quartas", semi: "na semifinal", terceiro: "na disputa do 3º lugar", final: "na final" };
+    const em = { dezesseis: "nos 16 avos", oitavas: "nas oitavas", quartas: "nas quartas", semi: "na semifinal", terceiro: "na disputa do 3º lugar", final: "na final" };
     out.push(pref + listaPt(ko.map(p => (em[p.chave] ? em[p.chave] + ", " : "") + frase(p))) + ".");
   }
   if (R.texto && R.j) {
