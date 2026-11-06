@@ -245,3 +245,79 @@ export function montarSeries(porGrupo /* [[rows classificados]] */, nSeries, tod
   }
   return out;
 }
+
+/* ---------- classificação final da etapa e classificação geral ---------- */
+// faixas de colocação de uma chave de mata-mata: campeã, vice, 3º, 4º, depois os eliminados de cada rodada
+function faixasChave(esporte, js, cmp) {
+  const main = js.filter(j => !j.perd), terc = js.find(j => j.perd), out = [];
+  if (!main.length) return out;
+  const maxR = Math.max(...main.map(j => j.rodada));
+  const perdedor = j => { const r = resultado(esporte, j); return r.venc && !j.wo ? (r.venc === j.a ? j.b : j.a) : null; };
+  const final = main.find(j => j.rodada === maxR);
+  const rf = resultado(esporte, final);
+  if (final.status === "encerrado" && rf.venc) { out.push({ eqs: [rf.venc], rot: "Campeã" }); const p = perdedor(final); if (p) out.push({ eqs: [p], rot: "Vice" }); }
+  else out.push({ eqs: [final.a, final.b].filter(Boolean).sort(cmp), rot: "Final" });
+  if (terc) {
+    const rt = resultado(esporte, terc);
+    if (terc.status === "encerrado" && rt.venc) { out.push({ eqs: [rt.venc], rot: "3º lugar" }); out.push({ eqs: [rt.venc === terc.a ? terc.b : terc.a], rot: "4º lugar" }); }
+    else out.push({ eqs: [terc.a, terc.b].filter(Boolean).sort(cmp), rot: "Semifinal" });
+  }
+  for (let r = maxR - 1; r >= 1; r--) {
+    if (terc && r === maxR - 1) continue; // perdedores da semifinal já estão no 3º/4º lugar
+    const eqs = main.filter(j => j.rodada === r).map(perdedor).filter(Boolean).sort(cmp);
+    if (eqs.length) out.push({ eqs, rot: (main.find(j => j.rodada === r) || {}).faseNome || "" });
+  }
+  return out;
+}
+
+// Colocação de cada equipe na etapa. completa = todos os jogos encerrados.
+export function colocacaoEtapa(esporte, et, js, equipeIds, nomeDe = id => id) {
+  if (!js.length) return { completa: false, ordem: [] };
+  const completa = js.every(j => j.status === "encerrado");
+  const camp = classificacao(esporte, equipeIds, js, nomeDe), ic = {}; camp.forEach((r, i) => ic[r.eid] = i);
+  const cmp = (a, b) => (ic[a] ?? 999) - (ic[b] ?? 999);
+  const faixas = [], usados = new Set();
+  const add = (eqs, rot, extra = {}) => { const f = eqs.filter(e => e && !usados.has(e)); f.forEach(e => usados.add(e)); if (f.length) faixas.push({ eqs: f, rot, ...extra }); };
+  const mj = js.filter(j => j.fase === "mata" && j.serie == null);
+  if (mj.length) faixasChave(esporte, mj, cmp).forEach(f => add(f.eqs, f.rot));
+  (et.series || []).forEach((s, si) => {
+    const sj = js.filter(j => j.serie === si);
+    if (s.tipo === "todos") classificacao(esporte, s.equipes, sj, nomeDe).forEach((r, k) => add([r.eid], (k + 1) + "º", { serie: si, posSerie: k + 1 }));
+    else faixasChave(esporte, sj, cmp).forEach((f, k) => add(f.eqs, f.rot, { serie: si }));
+  });
+  // quem não passou dos grupos: pela colocação no grupo e depois pela campanha
+  const grupos = gruposDe(et), posG = {};
+  grupos.forEach((g, gi) => classificacao(esporte, g, js.filter(j => j.fase === "grupo" && j.grupo === gi), nomeDe).forEach((r, k) => posG[r.eid] = k));
+  const resto = equipeIds.filter(e => !usados.has(e) && (posG[e] != null || js.some(j => j.a === e || j.b === e)));
+  const porPos = {}; resto.forEach(e => (porPos[posG[e] ?? 99] ||= []).push(e));
+  Object.keys(porPos).sort((a, b) => a - b).forEach(p => add(porPos[p].sort(cmp), grupos.length ? "Fase de grupos" : ""));
+  // posição sequencial; nas séries, a posição dentro da série dá a medalha
+  const ordem = []; let pos = 0;
+  const contSerie = {};
+  faixas.forEach(f => f.eqs.forEach(eid => {
+    pos++;
+    let med = null;
+    if (f.serie != null) { contSerie[f.serie] = (contSerie[f.serie] || 0) + 1; const ps = f.posSerie || contSerie[f.serie]; if (ps <= 3 && (f.rot === "Campeã" || f.rot === "Vice" || f.rot === "3º lugar" || f.posSerie)) med = ps; }
+    else if (pos <= 3 && ["Campeã", "Vice", "3º lugar"].includes(f.rot)) med = pos;
+    ordem.push({ eid, pos, rot: f.rot, serie: f.serie ?? null, medalha: med, ...camp[ic[eid]] });
+  }));
+  return { completa, ordem };
+}
+
+// Classificação geral do torneio (todas as etapas). Critério padrão: vitórias, empates, saldo, pontos feitos.
+// pontuacao (opcional, para regras de ranking da Liga): lista de pontos por colocação na etapa [1º, 2º, 3º, ...]
+export function classificacaoGeral(esporte, T, jogos, nomeDe = id => id, pontuacao = null) {
+  const ids = (T.equipes || []).map(e => e.id), tab = classificacao(esporte, ids, jogos.filter(j => !j.wo), nomeDe);
+  const sets = {}; ids.forEach(id => sets[id] = { sv: 0, sp: 0 });
+  if (esporte === "biribol") jogos.filter(j => j.status === "encerrado" && !j.wo).forEach(j => { const r = resultadoBiribol(j); if (sets[j.a]) { sets[j.a].sv += r.sa; sets[j.a].sp += r.sb; } if (sets[j.b]) { sets[j.b].sv += r.sb; sets[j.b].sp += r.sa; } });
+  const porEtapa = (T.etapas || []).map((et, ei) => colocacaoEtapa(esporte, et, jogos.filter(j => j.etapa === ei), ids, nomeDe));
+  const linhas = tab.map(r => {
+    const etapas = porEtapa.map(c => { const x = c.ordem.find(o => o.eid === r.eid); return x ? { pos: x.pos, completa: c.completa, medalha: x.medalha, serie: x.serie } : null; });
+    const fechadas = etapas.filter(x => x && x.completa);
+    const medalhas = [0, 0, 0]; fechadas.forEach(x => { if (x.medalha) medalhas[x.medalha - 1]++; });
+    const pts = pontuacao ? fechadas.reduce((s, x) => s + (pontuacao[x.pos - 1] || 0), 0) : null;
+    return { ...r, ...sets[r.eid], etapas, medalhas, melhor: fechadas.length ? Math.min(...fechadas.map(x => x.pos)) : null, pts };
+  });
+  if (pontuacao) linhas.sort((a, b) => b.pts - a.pts || b.v - a.v || b.e - a.e || b.saldo - a.saldo || b.pf - a.pf);
+  return { linhas, porEtapa };
+}
