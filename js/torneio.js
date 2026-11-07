@@ -594,15 +594,19 @@ export function montarTorneio(ctx) {
     if (ch.pares.some(([a, b]) => !a && !b)) return "Todo jogo da 1ª rodada precisa ter pelo menos uma equipe (sem adversário = passa direto).";
     return "";
   }
-  function editorChave(ch, candidatos) {
-    const usados = new Set(ch.pares.flat().filter(Boolean));
-    const sel = (pi, lado) => h("select", { "aria-label": "Jogo " + (pi + 1) + (lado ? " equipe B" : " equipe A"), onchange: e => { ch.pares[pi][lado] = e.target.value || null; render(); } },
-      h("option", { value: "" }, lado ? "— (passa direto)" : "—"), candidatos.map(id => h("option", { value: id, selected: ch.pares[pi][lado] === id }, eqNome(id) + (usados.has(id) && ch.pares[pi][lado] !== id ? " ✓" : ""))));
+  // todas as equipes ficam disponíveis em qualquer vaga; escolher uma equipe já usada a tira do lugar antigo
+  // onde(id) -> texto de onde ela está agora (ex.: "Jogo 2", "Série Prata"); liberar(id) tira a equipe de todas as vagas
+  function editorChave(ch, candidatos, onde, liberar) {
+    const ondeAqui = id => { const i = ch.pares.findIndex(p => p.includes(id)); return i >= 0 ? "Jogo " + (i + 1) : ""; };
+    const local = id => ondeAqui(id) || (onde ? onde(id) : "");
+    const tirar = id => { ch.pares = ch.pares.map(p => p.map(x => x === id ? null : x)); if (liberar) liberar(id); };
+    const sel = (pi, lado) => h("select", { "aria-label": "Jogo " + (pi + 1) + (lado ? " equipe B" : " equipe A"), onchange: e => { const id = e.target.value || null; if (id) tirar(id); ch.pares[pi][lado] = id; render(); } },
+      h("option", { value: "" }, lado ? "— (passa direto)" : "—"), candidatos.map(id => { const l = ch.pares[pi][lado] === id ? "" : local(id); return h("option", { value: id, selected: ch.pares[pi][lado] === id }, eqNome(id) + (l ? " (" + l + ")" : "")); }));
     const err = errosChave(ch);
     return h("div", { class: "t-col" },
       h("label", { class: "t-lbl" }, "1ª rodada", h("select", { onchange: e => { ajustarChave(ch, +e.target.value); render(); } }, NJOGOS.map(([n, t]) => h("option", { value: n, selected: ch.nJogos === n }, t)))),
       ch.pares.map((p, pi) => h("div", { class: "t-par" }, h("span", { class: "cap", text: "Jogo " + (pi + 1) }), sel(pi, 0), h("span", { text: "x" }), sel(pi, 1))),
-      h("p", { class: "cap" + (err ? " t-erro" : ""), text: err || "As fases seguintes, a final e a disputa de 3º lugar são criadas sozinhas. ✓ = equipe já escolhida em outro jogo." }));
+      h("p", { class: "cap" + (err ? " t-erro" : ""), text: err || "Todas as equipes aparecem em todas as vagas. Se escolher uma que já está em outro lugar (mostrado entre parênteses), ela sai de lá e vem para cá. As fases seguintes, a final e a disputa de 3º lugar são criadas sozinhas." }));
   }
 
   function classifAtual(et, ei, q) {
@@ -636,16 +640,19 @@ export function montarTorneio(ctx) {
       h("p", { class: "cap", text: "Escolha as equipes de cada série e como ela é disputada. Veio preenchido com a sugestão pela classificação dos grupos (1ºs na Ouro, 2ºs na Prata, 3ºs na Bronze)." }),
       h("label", { class: "t-lbl" }, "Quantas séries", h("select", { onchange: e => { const n = +e.target.value; while (m.series.length < n) m.series.push({ tipo: "mata", equipes: [], chave: novaChave([]) }); m.series = m.series.slice(0, n); render(); } },
         [1, 2, 3].map(n => h("option", { value: n, selected: m.series.length === n }, n + (n === 1 ? " série (Ouro)" : n === 2 ? " séries (Ouro e Prata)" : " séries (Ouro, Prata e Bronze)")))))));
-    const emOutra = (si, id) => m.series.some((s, k) => k !== si && (s.tipo === "todos" ? s.equipes : s.chave.pares.flat()).includes(id));
+    const membros = s => s.tipo === "todos" ? s.equipes : s.chave.pares.flat();
+    const ondeSerie = (si, id) => { const k = m.series.findIndex((s, k2) => k2 !== si && membros(s).includes(id)); return k >= 0 ? C.SERIES[k] : ""; };
+    const liberarOutras = (si, id) => m.series.forEach((s, k) => { if (k === si) return; s.equipes = s.equipes.filter(x => x !== id); s.chave.pares = s.chave.pares.map(p => p.map(x => x === id ? null : x)); });
     m.series.forEach((s, si) => {
       const card = h("section", { class: "t-serie s" + si }, h("h3", { class: "t-h t-serie-tit" }, h("span", { class: "t-medalha m" + si, text: MED[si] }), C.SERIES[si]));
       const corpo = h("div", { class: "t-card t-form" },
         h("div", { class: "chips" }, [["mata", "Mata-mata (com 3º lugar)"], ["todos", "Todos contra todos"]].map(([k, t]) => h("button", { type: "button", "aria-pressed": String(s.tipo === k), onclick: () => {
           if (k === s.tipo) return; if (k === "todos") s.equipes = s.chave.pares.flat().filter(Boolean); else s.chave = novaChave(s.equipes); s.tipo = k; render(); } }, t))));
-      if (s.tipo === "todos") corpo.append(h("div", { class: "t-escolha" }, todos.map(id => h("button", { type: "button", "aria-pressed": String(s.equipes.includes(id)), disabled: emOutra(si, id) && !s.equipes.includes(id),
-        onclick: () => { s.equipes = s.equipes.includes(id) ? s.equipes.filter(x => x !== id) : [...s.equipes, id]; render(); } }, eqNome(id)))),
-        h("p", { class: "cap", text: s.equipes.length + " equipes" + (s.equipes.length < 2 ? " · escolha pelo menos 2" : "") }));
-      else corpo.append(editorChave(s.chave, todos.filter(id => !emOutra(si, id) || s.chave.pares.flat().includes(id))));
+      if (s.tipo === "todos") corpo.append(h("div", { class: "t-escolha" }, todos.map(id => { const l = s.equipes.includes(id) ? "" : ondeSerie(si, id);
+        return h("button", { type: "button", "aria-pressed": String(s.equipes.includes(id)), title: l ? "Está na " + l + "; tocar move para cá" : null,
+          onclick: () => { if (s.equipes.includes(id)) s.equipes = s.equipes.filter(x => x !== id); else { liberarOutras(si, id); s.equipes = [...s.equipes, id]; } render(); } }, eqNome(id) + (l ? " (" + l.replace("Série ", "") + ")" : "")); })),
+        h("p", { class: "cap", text: s.equipes.length + " equipes" + (s.equipes.length < 2 ? " · escolha pelo menos 2" : "") + ". Todas as equipes aparecem; tocar numa que está em outra série a move para cá." }));
+      else corpo.append(editorChave(s.chave, todos, id => ondeSerie(si, id), id => liberarOutras(si, id)));
       card.append(corpo); w.append(card);
     });
     const ok = m.series.every(s => s.tipo === "todos" ? s.equipes.length >= 2 : !errosChave(s.chave));
