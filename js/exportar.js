@@ -741,3 +741,81 @@ async function salvarXL(wb, nome) {
   const buf = await wb.xlsx.writeBuffer();
   baixar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nome);
 }
+
+/* ======================= SÚMULA DE UMA PARTIDA ======================= */
+function dadosSumula(T, j, esporte) {
+  const BIR = esporte === "biribol", r = C.resultado(esporte, j), et = (T.etapas || [])[j.etapa] || {};
+  const eq = id => (T.equipes || []).find(e => e.id === id) || { nome: "?", atletas: [] };
+  const lados = ["a", "b"].map(l => {
+    const e = eq(j[l]), ats = [...(e.atletas || [])].sort((x, y) => (x.num ?? 999) - (y.num ?? 999));
+    const linhas = ats.map(a => { const s = (j.stats || {})[a.id] || {}; return { num: a.num ?? "", nome: a.nome, p: s.p || 0, b: s.b || 0, as: s.as || 0 }; });
+    const tot = linhas.reduce((t, x) => ({ p: t.p + x.p, b: t.b + x.b, as: t.as + x.as }), { p: 0, b: 0, as: 0 });
+    return { nome: e.nome, linhas, tot, venceu: r.venc === j[l] };
+  });
+  const parciais = BIR ? (j.sets || []).filter(s => s.a || s.b).map((s, i) => ({ n: i < 2 ? (i + 1) + "º set" : "Tiebreak", a: s.a, b: s.b }))
+    : (j.periodos || []).map(p => ({ n: /^\d/.test(p.n) ? p.n.replace("Q", "º quarto") : p.n === "BO" ? "Bola de ouro" : "Prorrogação " + p.n.slice(1), a: p.a, b: p.b }));
+  const placar = BIR ? r.sa + " x " + r.sb : r.pa + " x " + r.pb;
+  const resultado = r.empate ? "Empate" : r.venc ? "Vitória de " + eq(r.venc).nome + (BIR ? " por " + Math.max(r.sa, r.sb) + " sets a " + Math.min(r.sa, r.sb) : "") : "Sem resultado";
+  const destaque = [...lados[0].linhas.map(x => ({ ...x, eq: lados[0].nome })), ...lados[1].linhas.map(x => ({ ...x, eq: lados[1].nome }))].sort((x, y) => y.p - x.p)[0];
+  return { BIR, et, lados, parciais, placar, resultado, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };
+}
+const nomeSumula = (T, j, D, ext) => arquivo(T, "sumula-" + (D.lados[0].nome + "-x-" + D.lados[1].nome).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase() + "." + ext);
+
+export async function sumulaPDF(T, j, esporte, marca) {
+  const jsPDF = await libPDF(), logo = await logoDataUrl(marca.logo, marca.fundoLogo), D = dadosSumula(T, j, esporte);
+  const doc = pdfBase(jsPDF, marca, { T }, "Súmula"), m = marca, W = doc.internal.pageSize.getWidth();
+  let y = cabecalho(doc, logo, "Súmula da partida", D.info);
+  doc.setFontSize(9.5); doc.setTextColor("#555"); doc.text(D.quando, 10, y - 3); doc.setTextColor("#1a1a1a");
+  // placar
+  doc.setFillColor("#f3f6fa"); doc.setDrawColor("#cfd6de"); doc.roundedRect(10, y, W - 20, 30, 2, 2, "FD");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(13);
+  [[D.lados[0], 10 + (W - 20) * 0.25], [D.lados[1], 10 + (W - 20) * 0.75]].forEach(([l, cx]) => {
+    doc.setTextColor(l.venceu ? m.escura : "#444"); doc.text(doc.splitTextToSize(l.nome, (W - 20) * 0.4)[0], cx, y + 11, { align: "center" });
+    if (l.venceu) { doc.setFontSize(8); doc.setTextColor(m.cor); doc.text("VENCEDORA", cx, y + 17, { align: "center" }); doc.setFontSize(13); }
+  });
+  doc.setFontSize(24); doc.setTextColor(m.escura); doc.text(D.placar, W / 2, y + 14, { align: "center" });
+  doc.setFontSize(9.5); doc.setFont("helvetica", "normal"); doc.setTextColor("#333"); doc.text(D.resultado, W / 2, y + 24, { align: "center" });
+  y += 38;
+  y = secao(doc, y, D.BIR ? "Sets" : "Períodos", logo);
+  y = tabela(doc, y, { head: [["", D.lados[0].nome, D.lados[1].nome]], body: [...D.parciais.map(p => [p.n, p.a, p.b]), ["Total de pontos", D.parciais.reduce((s, p) => s + (p.a || 0), 0), D.parciais.reduce((s, p) => s + (p.b || 0), 0)]],
+    styles: { halign: "center", fontSize: 9.5, cellPadding: 1.3 }, columnStyles: { 0: { halign: "left", fontStyle: "bold", cellWidth: 45 } },
+    didParseCell: d => { if (d.section === "body" && d.row.index === D.parciais.length) { d.cell.styles.fontStyle = "bold"; d.cell.styles.fillColor = "#e6f2fb"; } } }, logo);
+  const lbl = D.BIR ? "Bloqueios" : "Tocos";
+  D.lados.forEach(l => {
+    y = secao(doc, y, "Atletas – " + l.nome, logo);
+    const body = l.linhas.length ? l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as]) : [["", "(atletas não cadastrados)", "", "", ""]];
+    y = tabela(doc, y, { head: [["Nº", "Atleta", "Pontos", lbl, "Assist."]], body: [...body, ["", "Total", l.tot.p, l.tot.b, l.tot.as]],
+      styles: { halign: "center", fontSize: 8.5, cellPadding: 1.1 }, columnStyles: { 0: { cellWidth: 14 }, 1: { halign: "left" } },
+      didParseCell: d => { if (d.section === "body" && d.row.index === body.length) { d.cell.styles.fontStyle = "bold"; d.cell.styles.fillColor = "#e6f2fb"; } } }, logo);
+  });
+  if (D.destaque) { doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.text((D.BIR ? "Maior pontuador: " : "Cestinha: ") + D.destaque.nome + " (" + D.destaque.eq + ") – " + D.destaque.p + " pontos", 10, y); doc.setFont("helvetica", "normal"); y += 8; }
+  // assinaturas
+  if (y > doc.internal.pageSize.getHeight() - 36) { doc.addPage(); y = cabecalho(doc, logo, "Súmula da partida", D.info); }
+  y += 8; doc.setDrawColor("#888"); doc.setLineWidth(0.3); doc.setFontSize(8.5); doc.setTextColor("#555");
+  const ass = ["Árbitro", "Mesário / anotador", "Capitão – " + D.lados[0].nome, "Capitão – " + D.lados[1].nome], cw = (W - 30) / 2;
+  ass.forEach((t, i) => { const x = 10 + (i % 2) * (cw + 10), yy = y + Math.floor(i / 2) * 15; doc.line(x, yy, x + cw, yy); doc.text(doc.splitTextToSize(t, cw)[0], x, yy + 4.5); });
+  rodapes(doc);
+  doc.save(nomeSumula(T, j, D, "pdf"));
+}
+
+export async function sumulaXLSX(T, j, esporte, marca) {
+  const ExcelJS = await libXLSX(), logo = await logoDataUrl(marca.logo, marca.fundoLogo), E = estilos(marca), D = dadosSumula(T, j, esporte);
+  const wb = new ExcelJS.Workbook(); wb.creator = marca.titulo; wb.created = new Date();
+  const ws = folha(wb, "Súmula", marca, logo, "Súmula da partida", D.info + (D.quando ? " · " + D.quando : ""), [8, 30, 12, 12, 12], false);
+  tituloSecao(ws, "Placar", E);
+  tabelaXL(ws, ["", D.lados[0].nome, "", D.lados[1].nome, ""], [["Placar", D.lados[0].venceu ? "VENCEDORA" : "", D.placar.split(" x ")[0], D.lados[1].venceu ? "VENCEDORA" : "", D.placar.split(" x ")[1]], ["Resultado", D.resultado, "", "", ""]], E, { esq: [0, 1], negrito: [2, 4], altura: 22 });
+  tituloSecao(ws, D.BIR ? "Sets" : "Períodos", E);
+  tabelaXL(ws, ["", D.lados[0].nome, "", D.lados[1].nome, ""], [...D.parciais.map(p => [p.n, "", p.a, "", p.b]), ["Total", "", D.parciais.reduce((s, p) => s + (p.a || 0), 0), "", D.parciais.reduce((s, p) => s + (p.b || 0), 0)]], E, { esq: [0], negrito: [0, 2, 4] });
+  const lbl = D.BIR ? "Bloqueios" : "Tocos";
+  D.lados.forEach(l => {
+    tituloSecao(ws, "Atletas – " + l.nome, E);
+    tabelaXL(ws, ["Nº", "Atleta", "Pontos", lbl, "Assist."], [...l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as]), ["", "Total", l.tot.p, l.tot.b, l.tot.as]], E, { esq: [1], negrito: [2], destaque: i => i === l.linhas.length });
+  });
+  if (D.destaque) { tituloSecao(ws, (D.BIR ? "Maior pontuador: " : "Cestinha: ") + D.destaque.nome + " (" + D.destaque.eq + ") – " + D.destaque.p + " pontos", E); ws.__linha++; }
+  tituloSecao(ws, "Assinaturas", E);
+  ["Árbitro", "Mesário / anotador", "Capitão – " + D.lados[0].nome, "Capitão – " + D.lados[1].nome].forEach(t => {
+    const r = ws.__linha; ws.getRow(r).height = 30; ws.getCell(r, 1).value = t; ws.getCell(r, 1).font = { name: "Calibri", size: 10, color: { argb: "FF555555" } };
+    ws.mergeCells(r, 2, r, 5); ws.getCell(r, 2).border = { bottom: { style: "thin", color: { argb: "FF888888" } } }; ws.__linha = r + 1;
+  });
+  await salvarXL(wb, nomeSumula(T, j, D, "xlsx"));
+}

@@ -91,7 +91,7 @@ function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("on"
 
 let user=null, isAdmin=false, isEditor=false, pararEditor=null, pararLista=null;
 const painel = montarApp({ db, fs:{ collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp }, toast,
-  root:$("root"), podeEditar:()=>isAdmin||isEditor, meuUid:()=>user ? user.uid : null });
+  root:$("root"), podeEditar:()=>isAdmin||isEditor, meuUid:()=>user ? user.uid : null, autor:()=>user ? (user.email||"") : null });
 
 /* ---------- login ---------- */
 $("btn-admin").onclick = async ()=>{

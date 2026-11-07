@@ -111,6 +111,22 @@ service cloud.firestore {
       }
     }
 
+    // ===== MÍDIAS (fotos e vídeos dos torneios, em pedaços) e perfis do Instagram =====
+    match /midia_config/{app} {
+      allow read: if true;
+      allow write: if podeTorneio();
+    }
+    match /{col}/{id} {
+      allow read: if col.matches('midias_[a-z]+');
+      allow write: if col.matches('midias_[a-z]+') && podeTorneio();
+      match /partes/{p} {
+        allow read: if col.matches('midias_[a-z]+');
+        allow delete: if col.matches('midias_[a-z]+') && podeTorneio();
+        allow create, update: if col.matches('midias_[a-z]+') && podeTorneio()
+          && request.resource.data.d is string && request.resource.data.d.size() <= 1000000;
+      }
+    }
+
     // ===== MOCOCA NA LIGA (app do time) =====
     match /mococa_torneios/{t} {
       allow read: if true;

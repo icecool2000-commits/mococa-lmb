@@ -3,6 +3,7 @@
 import * as C from "./torneio-core.js";
 import { gerarDemo } from "./torneio-demo.js";
 import * as X from "./exportar.js";
+import { montarMidias } from "./midias.js";
 
 export function montarTorneio(ctx) {
   const { db, fs, esporte, col, maxAtletas, toast } = ctx;
@@ -41,6 +42,13 @@ export function montarTorneio(ctx) {
   const jogosEtapa = i => jogos.filter(j => j.etapa === i);
   const res = j => C.resultado(esporte, j);
   const MED = ["🥇", "🥈", "🥉"];
+  // aba Mídias (fotos e vídeos + Instagram), se o app configurar ctx.midias = { app, perfis, hashtags }
+  let MID = null;
+  if (ctx.midias) setTimeout(() => {
+    MID = montarMidias({ db, fs: ctx.fs, h, toast, app: ctx.midias.app, perfisPadrao: ctx.midias.perfis, hashtags: ctx.midias.hashtags, podeEditar: () => podeEditar(),
+      perguntar: (m, f, r) => perguntar(m, f, r), torneio: () => T ? { id: T.id, nome: T.nome } : null, autor: ctx.autor, render: () => render() });
+    render();
+  }, 0);
   const SERIES_OK = !!ctx.formatoSeries;
   // equipe da casa (app do time): nome e atletas vêm do elenco
   const casa = () => { const c = ctx.equipeCasa ? ctx.equipeCasa() : null; return c && c.nome ? { nome: c.nome, atletas: (c.atletas || []).slice(0, maxAtletas).map(a => ({ id: a.id, nome: a.nome, num: a.num ?? null })) } : null; }; // Liga: 3 primeiros de cada grupo formam as séries Ouro, Prata e Bronze
@@ -86,10 +94,10 @@ export function montarTorneio(ctx) {
         podeEditar() && h("div", { class: "t-linha" }, h("button", { type: "button", onclick: () => { formNovo = true; render(); } }, "Criar torneio"), botaoDemo())));
       return;
     }
-    const abas = [["geral", "Torneio"], ["equipes", "Equipes"], ["chaves", "Chaves e jogos"], ["stats", "Estatísticas"]];
+    const abas = [["geral", "Torneio"], ["equipes", "Equipes"], ["chaves", "Chaves e jogos"], ["stats", "Estatísticas"], ...(MID ? [["midias", "Mídias"]] : [])];
     root.append(h("div", { class: "t-abas", role: "tablist" }, abas.map(([k, t]) =>
       h("button", { type: "button", role: "tab", "aria-selected": String(aba === k), onclick: () => { aba = k; ls.set("aba", k); render(); } }, t))));
-    const corpo = { geral: telaGeral, equipes: telaEquipes, chaves: telaChaves, stats: telaStats }[aba] || telaGeral;
+    const corpo = { geral: telaGeral, equipes: telaEquipes, chaves: telaChaves, stats: telaStats, midias: MID ? MID.tela : null }[aba] || telaGeral;
     root.append(corpo());
     if (sumulaJid) root.append(telaSumula());
     document.body.style.overflow = sumulaJid ? "hidden" : "";
@@ -749,6 +757,11 @@ export function montarTorneio(ctx) {
     render();
   }
 
+  async function gerarSumula(j, tipo) {
+    toast("Gerando a súmula…");
+    try { await (tipo === "pdf" ? X.sumulaPDF : X.sumulaXLSX)({ ...T }, j, esporte, ctx.marca || { titulo: "Torneio", logo: "logo.png", escura: "#1f1f23", cor: "#555", destaque: "#999" }); toast("Súmula pronta."); }
+    catch (e) { console.error(e); toast("Não deu para gerar a súmula. Confira a internet."); }
+  }
   function telaSumula() {
     const j = sumulaLocal; if (!j) { sumulaJid = null; return null; }
     const ed = podeEditar() && j.a && j.b, r = res(j), fim = j.status === "encerrado";
@@ -764,6 +777,8 @@ export function montarTorneio(ctx) {
       h("div", { class: "t-x", text: "x" }),
       h("div", { class: "t-pe" + (fim && r.venc === j.b ? " venc" : "") }, h("span", { text: eqNome(j.b) }), h("b", { text: BIR ? r.sb : r.pb }))));
     if (fim) painel.append(h("p", { class: "t-res", text: r.empate ? "Empate" : "Vitória de " + eqNome(r.venc) + (j.periodos && j.periodos.some(p => p.n === "BO") ? " na bola de ouro" : j.periodos && j.periodos.some(p => /^P/.test(p.n)) ? " na prorrogação" : "") }));
+    if (fim && !j.wo) painel.append(h("div", { class: "t-linha t-sum-exp" }, h("span", { class: "cap", text: "Gerar súmula:" }),
+      h("button", { type: "button", class: "ghost t-mini", onclick: () => gerarSumula(j, "pdf") }, "PDF"), h("button", { type: "button", class: "ghost t-mini", onclick: () => gerarSumula(j, "xlsx") }, "Excel")));
     BIR ? sumulaBiribol(painel, j, ed, fim) : sumulaBasquete(painel, j, ed, fim);
     // atletas
     painel.append(h("div", { class: "chips t-lados" }, ["a", "b"].map(l => h("button", { type: "button", "aria-pressed": String(ladoSel === l), onclick: () => { ladoSel = l; render(); } }, eqNome(j[l])))));
