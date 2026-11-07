@@ -52,7 +52,7 @@ export function montarTorneio(ctx) {
   const SERIES_OK = !!ctx.formatoSeries;
   C.definirRegra({ pontosSets: !!ctx.pontosSets });
   const PTS = () => C.REGRA.pontosSets;
-  const TXT_CRIT = () => PTS() ? "Pontos: 2x0 = 3 pts; 2x1 = 2 pts para quem vence e 1 pt para quem perde. Desempate: vitórias, saldo de pontos e pontos feitos." : "Desempate: vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos.";
+  const TXT_CRIT = () => PTS() ? "Pontos: 2x0 = 3 pts; 2x1 = 2 pts para quem vence e 1 pt para quem perde. Desempate: pontos marcados." : "Desempate: vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos.";
   // equipe da casa (app do time): nome e atletas vêm do elenco
   const casa = () => { const c = ctx.equipeCasa ? ctx.equipeCasa() : null; return c && c.nome ? { nome: c.nome, atletas: (c.atletas || []).slice(0, maxAtletas).map(a => ({ id: a.id, nome: a.nome, num: a.num ?? null })) } : null; }; // Liga: 3 primeiros de cada grupo formam as séries Ouro, Prata e Bronze
 
@@ -242,7 +242,7 @@ export function montarTorneio(ctx) {
     const G = C.classificacaoGeral(esporte, T, jogos, eqNome, ctx.pontuacao || null), nE = T.etapas.length, temSerie = T.etapas.some(e => (e.series || []).length);
     const sv = (a, b) => (a > 0 ? "+" : "") + a;
     return h("div", { class: "card" }, h("h3", { text: "Classificação geral" }),
-      h("p", { class: "cap", text: (ctx.pontuacao ? "Pela pontuação do ranking em cada etapa; desempate: " : PTS() ? "Critério: pontos (2x0 = 3; 2x1 = 2 e 1 para quem perde), depois " : "Critério: ") + "vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos, somando todas as etapas." + (nE > 1 ? " As colunas de etapa mostram a colocação final de cada equipe (* = etapa em andamento)." : "") }),
+      h("p", { class: "cap", text: (ctx.pontuacao ? "Pela pontuação do ranking em cada etapa; desempate: " : PTS() ? "Critério: pontos (2x0 = 3; 2x1 = 2 e 1 para quem perde); desempate: pontos marcados, depois " : "Critério: ") + "vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos, somando todas as etapas." + (nE > 1 ? " As colunas de etapa mostram a colocação final de cada equipe (* = etapa em andamento)." : "") }),
       h("div", { class: "tablebox" }, h("table", { class: "t-tab t-tab-lg t-geral" },
         h("thead", null, h("tr", null, h("th", { text: "#" }), h("th", { class: "l", text: "Equipe" }), ctx.pontuacao && h("th", { text: "Pts" }), PTS() && !ctx.pontuacao && h("th", { text: "Pts" }),
           T.etapas.map((et, i) => h("th", { text: nE > 1 ? "Et. " + (i + 1) : "Etapa", title: et.nome })), h("th", { text: "J" }), h("th", { text: "V" }), !BIR && h("th", { text: "E" }), h("th", { text: "D" }),

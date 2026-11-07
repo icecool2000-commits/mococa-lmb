@@ -474,7 +474,7 @@ export async function relatorioPDF(T, jogos, esporte, marca) {
     y = secao(doc, y, "Classificação geral", logo);
     y = tabela(doc, y, { head: [gt.head], body: gt.body, styles: { fontSize: gt.head.length > 12 ? 6.8 : 7.8, halign: "center", cellPadding: 1.3, lineColor: "#cfd6de", lineWidth: 0.15 }, columnStyles: { 1: { halign: "left", fontStyle: "bold" } },
       didParseCell: d => { if (d.section === "body" && d.row.index < 3 && d.column.index === 0) { d.cell.styles.fillColor = COR_MED[d.row.index]; d.cell.styles.textColor = "#fff"; d.cell.styles.fontStyle = "bold"; } } }, logo);
-    doc.setFontSize(7.5); doc.setTextColor("#6b7480"); doc.text("Critério: vitórias, " + (D.BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos. Et. = colocação final em cada etapa (* = etapa em andamento).", 10, y - 2); doc.setTextColor("#1a1a1a"); y += 4;
+    doc.setFontSize(7.5); doc.setTextColor("#6b7480"); doc.text((PTS() ? "Critério: pontos (2x0 = 3; 2x1 = 2 e 1 ao perdedor); desempate: pontos marcados." : "Critério: vitórias, " + (D.BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos.") + " Et. = colocação final em cada etapa (* = etapa em andamento).", 10, y - 2); doc.setTextColor("#1a1a1a"); y += 4;
   }
   y = secao(doc, y, "Média de pontos de cada equipe (por jogo)", logo);
   const eqs = D.equipes.filter(e => e.n).sort((a, b) => b.mpf - a.mpf);
@@ -692,7 +692,7 @@ export async function relatorioXLSX(T, jogos, esporte, marca) {
   if (podsX.length) { tituloSecao(ws, "Pódios", E); tabelaXL(ws, ["Etapa · disputa", "1º / 2º lugar", "3º lugar"], podsX, E, { esq: [0, 1, 2], negrito: [1] }); }
   if (D.fim.length) {
     const gt = geralTabela(D);
-    ws = folha(wb, "Classificação geral", marca, logo, T.nome, "Classificação geral · vitórias, " + (D.BIR ? "" : "empates, ") + "saldo e pontos feitos · Et. = colocação final na etapa", [6, 26, ...gt.head.slice(2).map(() => 9)], true);
+    ws = folha(wb, "Classificação geral", marca, logo, T.nome, "Classificação geral · " + (PTS() ? "pontos (desempate: pontos marcados)" : "vitórias, " + (D.BIR ? "" : "empates, ") + "saldo e pontos feitos") + " · Et. = colocação final na etapa", [6, 26, ...gt.head.slice(2).map(() => 9)], true);
     tituloSecao(ws, "Classificação geral", E);
     tabelaXL(ws, gt.head, gt.body, E, { esq: [1], negrito: [0, 1], destaque: i => i < 3 });
   }
