@@ -218,3 +218,4 @@ body.modo-torneio header h1{display:none}
 .t-insta{white-space:normal}
 .t-form textarea{font:inherit;width:100%;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
 .t-abas button{font-size:12px;overflow-wrap:anywhere}
+.t-pts{font-weight:800}

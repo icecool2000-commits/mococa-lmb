@@ -1,6 +1,7 @@
 // Exportações do torneio: tabela de jogos (para imprimir/preencher) e relatório completo,
 // em PDF (jsPDF + AutoTable) e Excel estilizado (ExcelJS). Bibliotecas carregadas só quando usadas.
 import * as C from "./torneio-core.js";
+const PTS = () => C.REGRA.pontosSets;
 
 const LIBS = {
   jspdf: "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
@@ -364,8 +365,8 @@ const rotTab = g => g.serie != null ? "da " + g.titulo : "do grupo " + g.letra;
 const MED_TXT = ["Ouro", "Prata", "Bronze"];
 function geralTabela(D) {
   const nE = D.T.etapas.length, serie = D.T.etapas.some(e => (e.series || []).length);
-  const head = ["#", "Equipe", ...D.T.etapas.map((e, i) => nE > 1 ? "Et. " + (i + 1) : "Etapa"), "J", "V", ...(D.BIR ? [] : ["E"]), "D", ...(D.BIR ? ["Sets"] : []), "Saldo", "PF", serie ? "Medalhas" : "Pódios"];
-  const body = D.geral.linhas.map((r, i) => [(i + 1) + "º", D.nome(r.eid), ...r.etapas.map(x => x ? x.pos + "º" + (x.completa ? "" : "*") : "–"), r.j, r.v, ...(D.BIR ? [] : [r.e]), r.d,
+  const head = ["#", "Equipe", ...(PTS() ? ["Pts"] : []), ...D.T.etapas.map((e, i) => nE > 1 ? "Et. " + (i + 1) : "Etapa"), "J", "V", ...(D.BIR ? [] : ["E"]), "D", ...(D.BIR ? ["Sets"] : []), "Saldo", "PF", serie ? "Medalhas" : "Pódios"];
+  const body = D.geral.linhas.map((r, i) => [(i + 1) + "º", D.nome(r.eid), ...(PTS() ? [r.pg] : []), ...r.etapas.map(x => x ? x.pos + "º" + (x.completa ? "" : "*") : "–"), r.j, r.v, ...(D.BIR ? [] : [r.e]), r.d,
     ...(D.BIR ? [r.sv + "–" + r.sp] : []), (r.saldo > 0 ? "+" : "") + r.saldo, r.pf, r.medalhas.map((n, k) => n ? n + " " + MED_TXT[k].toLowerCase() : "").filter(Boolean).join(", ") || "–"]);
   return { head, body };
 }
@@ -409,9 +410,9 @@ export async function tabelaPDF(T, jogos, esporte, marca) {
       let yLinha = y, maxY = y;
       et.tabelas.forEach((g, gi) => {
         const c = gi % cols; if (c === 0 && gi) { yLinha = maxY; }
-        const body = g.classif.map((r, i) => { const temJogo = r.j > 0; return [i + 1 + "º", D.nome(r.eid), temJogo ? r.j : "", temJogo ? r.v : "", ...(D.BIR ? [] : [temJogo ? r.e : ""]), temJogo ? r.d : "", temJogo ? r.pf : "", temJogo ? r.pc : "", temJogo ? (r.saldo > 0 ? "+" : "") + r.saldo : ""]; });
+        const body = g.classif.map((r, i) => { const temJogo = r.j > 0; return [i + 1 + "º", D.nome(r.eid), ...(PTS() ? [temJogo ? r.pg : ""] : []), temJogo ? r.j : "", temJogo ? r.v : "", ...(D.BIR ? [] : [temJogo ? r.e : ""]), temJogo ? r.d : "", temJogo ? r.pf : "", temJogo ? r.pc : "", temJogo ? (r.saldo > 0 ? "+" : "") + r.saldo : ""]; });
         doc.autoTable({ startY: yLinha, margin: { left: 10 + c * (gw + 6), right: W - (10 + c * (gw + 6) + gw), top: 34, bottom: 16 }, tableWidth: gw, theme: "grid",
-          head: [[{ content: g.titulo.toUpperCase(), colSpan: D.BIR ? 8 : 9, styles: { halign: "left", fillColor: doc.__marca.cor, fontSize: 10 } }], ["", "Equipe", "J", "V", ...(D.BIR ? [] : ["E"]), "D", "PF", "PT", "Saldo"]],
+          head: [[{ content: g.titulo.toUpperCase(), colSpan: (D.BIR ? 8 : 9) + (PTS() ? 1 : 0), styles: { halign: "left", fillColor: doc.__marca.cor, fontSize: 10 } }], ["", "Equipe", ...(PTS() ? ["Pts"] : []), "J", "V", ...(D.BIR ? [] : ["E"]), "D", "PF", "PT", "Saldo"]],
           body, didParseCell: d => { if (g.serie != null && !g.previsto && d.section === "body" && d.row.index < 3 && d.column.index === 0) { d.cell.styles.fillColor = COR_MED[d.row.index]; d.cell.styles.textColor = "#fff"; d.cell.styles.fontStyle = "bold"; } },
           styles: { fontSize: 8, cellPadding: 1.6, lineColor: "#cfd6de", lineWidth: 0.15, halign: "center", minCellHeight: 6.5 },
           headStyles: { fillColor: doc.__marca.escura, textColor: "#fff", halign: "center" }, columnStyles: { 1: { halign: "left", fontStyle: "bold", cellWidth: gw * 0.36 } },
@@ -506,7 +507,7 @@ export async function relatorioPDF(T, jogos, esporte, marca) {
     doc.addPage(); y = cabecalho(doc, logo, T.nome, et.nome + " · Resultados");
     et.tabelas.forEach(g => {
       y = secao(doc, y, g.titulo + " – classificação", logo);
-      y = tabela(doc, y, { head: [["", "Equipe", "J", "V", ...(D.BIR ? [] : ["E"]), "D", "PF", "PT", "Saldo"]], body: g.classif.map((r, i) => [i + 1 + "º", D.nome(r.eid), r.j, r.v, ...(D.BIR ? [] : [r.e]), r.d, r.pf, r.pc, (r.saldo > 0 ? "+" : "") + r.saldo]),
+      y = tabela(doc, y, { head: [["", "Equipe", ...(PTS() ? ["Pts"] : []), "J", "V", ...(D.BIR ? [] : ["E"]), "D", "PF", "PT", "Saldo"]], body: g.classif.map((r, i) => [i + 1 + "º", D.nome(r.eid), ...(PTS() ? [r.pg] : []), r.j, r.v, ...(D.BIR ? [] : [r.e]), r.d, r.pf, r.pc, (r.saldo > 0 ? "+" : "") + r.saldo]),
         styles: { fontSize: 8.4, halign: "center", lineColor: "#cfd6de", lineWidth: 0.15 }, columnStyles: { 1: { halign: "left", fontStyle: "bold" } },
         didParseCell: d => { if (d.section === "body" && d.row.index < g.passam) d.cell.styles.fillColor = g.serie != null && d.column.index === 0 ? COR_MED[d.row.index] : "#e6f2fb"; } }, logo);
     });
@@ -603,7 +604,7 @@ export async function tabelaXLSX(T, jogos, esporte, marca) {
     if (et.vazio) { tituloSecao(ws, "Equipes inscritas (sorteio ainda não feito)", E); tabelaXL(ws, ["#", "Equipe", "Atletas"], T.equipes.map((e, i) => [i + 1, e.nome, (e.atletas || []).map(a => a.nome).join(", ")]), E, { quebra: true }); return; }
     et.tabelas.forEach(g => {
       tituloSecao(ws, g.titulo + " – classificação", E);
-      tabelaXL(ws, ["Pos.", "Equipe", "", "", "J", "V", ...(D.BIR ? [] : ["E"]), "D", "PF", "PT", "Saldo"], g.classif.map((r, i) => [i + 1 + "º", D.nome(r.eid), "", "", r.j || "", r.j ? r.v : "", ...(D.BIR ? [] : [r.j ? r.e : ""]), r.j ? r.d : "", r.j ? r.pf : "", r.j ? r.pc : "", r.j ? r.saldo : ""]), E, { negrito: [1], altura: 20, mesclas: [[1, 3]] });
+      tabelaXL(ws, ["Pos.", "Equipe", "", "", ...(PTS() ? ["Pts"] : []), "J", "V", ...(D.BIR ? [] : ["E"]), "D", "PF", "PT", "Saldo"], g.classif.map((r, i) => [i + 1 + "º", D.nome(r.eid), "", "", ...(PTS() ? [r.j ? r.pg : ""] : []), r.j || "", r.j ? r.v : "", ...(D.BIR ? [] : [r.j ? r.e : ""]), r.j ? r.d : "", r.j ? r.pf : "", r.j ? r.pc : "", r.j ? r.saldo : ""]), E, { negrito: [1], altura: 20, mesclas: [[1, 3]] });
       tituloSecao(ws, "Jogos " + rotTab(g), E);
       tabelaXL(ws, cab, linhasJogos(D, g.jogos, false), E, { esq: [], negrito: D.BIR ? [3, 7] : [3, 11], altura: 22 });
     });
@@ -709,7 +710,7 @@ export async function relatorioXLSX(T, jogos, esporte, marca) {
     if (et.vazio) return;
     ws = folha(wb, et.nome + " jogos", marca, logo, T.nome, et.nome + " · Classificação e resultados", D.BIR ? [7, 14, 6, 24, 12, 12, 12, 24, 8, 22] : [7, 14, 6, 22, 7, 7, 7, 7, 7, 10, 7, 22, 18], true);
     et.tabelas.forEach(g => { tituloSecao(ws, g.titulo, E);
-      tabelaXL(ws, ["Pos.", "Equipe", "", "", "J", "V", ...(D.BIR ? [] : ["E"]), "D", "PF", "PT", "Saldo"], g.classif.map((r, i) => [i + 1 + "º", D.nome(r.eid), "", "", r.j, r.v, ...(D.BIR ? [] : [r.e]), r.d, r.pf, r.pc, r.saldo]), E, { negrito: [1], destaque: i => i < g.passam, mesclas: [[1, 3]] }); });
+      tabelaXL(ws, ["Pos.", "Equipe", "", "", ...(PTS() ? ["Pts"] : []), "J", "V", ...(D.BIR ? [] : ["E"]), "D", "PF", "PT", "Saldo"], g.classif.map((r, i) => [i + 1 + "º", D.nome(r.eid), "", "", ...(PTS() ? [r.pg] : []), r.j, r.v, ...(D.BIR ? [] : [r.e]), r.d, r.pf, r.pc, r.saldo]), E, { negrito: [1], destaque: i => i < g.passam, mesclas: [[1, 3]] }); });
     const todos = jogos.filter(j => j.etapa === et.idx && !j.wo).sort((a, b) => (D.numero[a.id] || 0) - (D.numero[b.id] || 0));
     tituloSecao(ws, "Todos os jogos", E);
     tabelaXL(ws, cabJogos(D.BIR), linhasJogos(D, todos, false).map((l, i) => { if (todos[i].fase === "mata") l[1] = todos[i].faseNome; return l; }), E, { esq: [], negrito: D.BIR ? [3, 7] : [3, 11] });

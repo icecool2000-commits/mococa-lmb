@@ -50,6 +50,9 @@ export function montarTorneio(ctx) {
     render();
   }, 0);
   const SERIES_OK = !!ctx.formatoSeries;
+  C.definirRegra({ pontosSets: !!ctx.pontosSets });
+  const PTS = () => C.REGRA.pontosSets;
+  const TXT_CRIT = () => PTS() ? "Pontos: 2x0 = 3 pts; 2x1 = 2 pts para quem vence e 1 pt para quem perde. Desempate: vitórias, saldo de pontos e pontos feitos." : "Desempate: vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos.";
   // equipe da casa (app do time): nome e atletas vêm do elenco
   const casa = () => { const c = ctx.equipeCasa ? ctx.equipeCasa() : null; return c && c.nome ? { nome: c.nome, atletas: (c.atletas || []).slice(0, maxAtletas).map(a => ({ id: a.id, nome: a.nome, num: a.num ?? null })) } : null; }; // Liga: 3 primeiros de cada grupo formam as séries Ouro, Prata e Bronze
 
@@ -239,13 +242,13 @@ export function montarTorneio(ctx) {
     const G = C.classificacaoGeral(esporte, T, jogos, eqNome, ctx.pontuacao || null), nE = T.etapas.length, temSerie = T.etapas.some(e => (e.series || []).length);
     const sv = (a, b) => (a > 0 ? "+" : "") + a;
     return h("div", { class: "card" }, h("h3", { text: "Classificação geral" }),
-      h("p", { class: "cap", text: (ctx.pontuacao ? "Pela pontuação do ranking em cada etapa; desempate: " : "Critério: ") + "vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos, somando todas as etapas." + (nE > 1 ? " As colunas de etapa mostram a colocação final de cada equipe (* = etapa em andamento)." : "") }),
+      h("p", { class: "cap", text: (ctx.pontuacao ? "Pela pontuação do ranking em cada etapa; desempate: " : PTS() ? "Critério: pontos (2x0 = 3; 2x1 = 2 e 1 para quem perde), depois " : "Critério: ") + "vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos, somando todas as etapas." + (nE > 1 ? " As colunas de etapa mostram a colocação final de cada equipe (* = etapa em andamento)." : "") }),
       h("div", { class: "tablebox" }, h("table", { class: "t-tab t-tab-lg t-geral" },
-        h("thead", null, h("tr", null, h("th", { text: "#" }), h("th", { class: "l", text: "Equipe" }), ctx.pontuacao && h("th", { text: "Pts" }),
+        h("thead", null, h("tr", null, h("th", { text: "#" }), h("th", { class: "l", text: "Equipe" }), ctx.pontuacao && h("th", { text: "Pts" }), PTS() && !ctx.pontuacao && h("th", { text: "Pts" }),
           T.etapas.map((et, i) => h("th", { text: nE > 1 ? "Et. " + (i + 1) : "Etapa", title: et.nome })), h("th", { text: "J" }), h("th", { text: "V" }), !BIR && h("th", { text: "E" }), h("th", { text: "D" }),
           BIR && h("th", { text: "Sets" }), h("th", { text: "Saldo" }), h("th", { text: "PF" }), h("th", { text: temSerie ? "Medalhas" : "Pódios" }))),
         h("tbody", null, G.linhas.map((r, i) => h("tr", { class: i < 3 && r.j ? "podio p" + (i + 1) : "" },
-          h("td", { text: (i + 1) + "º" }), h("td", { class: "l", text: eqNome(r.eid) }), ctx.pontuacao && h("td", { text: r.pts }),
+          h("td", { text: (i + 1) + "º" }), h("td", { class: "l", text: eqNome(r.eid) }), ctx.pontuacao && h("td", { text: r.pts }), PTS() && !ctx.pontuacao && h("td", { class: "t-pts", text: r.pg }),
           r.etapas.map(x => h("td", { text: posTxt(x), title: x && x.serie != null ? C.SERIES[x.serie] : null })), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }),
           BIR && h("td", { text: r.sv + "–" + r.sp }), h("td", { class: "saldo " + (r.saldo > 0 ? "pos" : r.saldo < 0 ? "neg" : ""), text: sv(r.saldo) }), h("td", { text: r.pf }),
           h("td", { text: r.medalhas.map((n, k) => n ? n + MED[k] : "").filter(Boolean).join(" ") || "–" })))))),
@@ -361,12 +364,12 @@ export function montarTorneio(ctx) {
         grade.append(h("div", { class: "t-card t-grupo" },
           h("div", { class: "t-gtit" }, "Grupo " + C.letraGrupo(gi)),
           h("table", { class: "t-tab" },
-            h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l", text: "Equipe" }), h("th", { text: "J" }), h("th", { text: "V" }), !BIR && h("th", { text: "E" }), h("th", { text: "D" }), h("th", { text: "Saldo" }))),
+            h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l", text: "Equipe" }), PTS() && h("th", { text: "Pts" }), h("th", { text: "J" }), h("th", { text: "V" }), !BIR && h("th", { text: "E" }), h("th", { text: "D" }), h("th", { text: "Saldo" }))),
             h("tbody", null, cl.map((r, i) => h("tr", { class: i < q ? "passa" : "" },
-              h("td", { text: (i + 1) + "º" }), h("td", { class: "l", text: eqNome(r.eid) }), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }), h("td", { text: (r.saldo > 0 ? "+" : "") + r.saldo })))))));
+              h("td", { text: (i + 1) + "º" }), h("td", { class: "l", text: eqNome(r.eid) }), PTS() && h("td", { class: "t-pts", text: r.pg }), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }), h("td", { text: (r.saldo > 0 ? "+" : "") + r.saldo })))))));
       });
       w.append(grade);
-      w.append(h("p", { class: "cap", text: (emSeries ? "Em destaque, quem vai para as séries: " + C.SERIES.slice(0, et.classificam || 3).map((s, k) => (k + 1) + "º → " + s).join(", ") + ". " : "Em destaque, quem passa de fase (" + (et.classificam || 2) + (grp.length > 1 ? " por grupo" : "") + "). ") + "Desempate: vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos." }));
+      w.append(h("p", { class: "cap", text: (emSeries ? "Em destaque, quem vai para as séries: " + C.SERIES.slice(0, et.classificam || 3).map((s, k) => (k + 1) + "º → " + s).join(", ") + ". " : "Em destaque, quem passa de fase (" + (et.classificam || 2) + (grp.length > 1 ? " por grupo" : "") + "). ") + TXT_CRIT() }));
       grp.forEach((g, gi) => {
         const jg = js.filter(j => j.fase === "grupo" && j.grupo === gi).sort((a, b) => a.rodada - b.rodada || a.ordem - b.ordem);
         const editar = podeEditar();
@@ -407,9 +410,9 @@ export function montarTorneio(ctx) {
         if (s.tipo === "todos") {
           const cl = C.classificacao(esporte, s.equipes, sj, eqNome);
           card.append(h("div", { class: "t-card t-grupo" }, h("table", { class: "t-tab" },
-            h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l", text: "Equipe" }), h("th", { text: "J" }), h("th", { text: "V" }), !BIR && h("th", { text: "E" }), h("th", { text: "D" }), h("th", { text: "Saldo" }))),
+            h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l", text: "Equipe" }), PTS() && h("th", { text: "Pts" }), h("th", { text: "J" }), h("th", { text: "V" }), !BIR && h("th", { text: "E" }), h("th", { text: "D" }), h("th", { text: "Saldo" }))),
             h("tbody", null, cl.map((r, i) => h("tr", { class: i < 3 ? "passa" : "" },
-              h("td", { text: (i + 1) + "º" }), h("td", { class: "l", text: eqNome(r.eid) }), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }), h("td", { text: (r.saldo > 0 ? "+" : "") + r.saldo })))))));
+              h("td", { text: (i + 1) + "º" }), h("td", { class: "l", text: eqNome(r.eid) }), PTS() && h("td", { class: "t-pts", text: r.pg }), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }), h("td", { text: (r.saldo > 0 ? "+" : "") + r.saldo })))))));
           card.append(h("details", { class: "t-card t-jogos", open: true }, h("summary", null, "Jogos da " + C.SERIES[si] + " · " + sj.filter(j => j.status === "encerrado").length + "/" + sj.length),
             sj.sort((a, b) => a.rodada - b.rodada || a.ordem - b.ordem).map(j => cartaoJogo(j))));
         } else card.append(chaveMata(sj));

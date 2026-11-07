@@ -101,21 +101,34 @@ export function resultado(esporte, jogo) {
   return r;
 }
 
+/* ---------- regra de pontos (Liga Metropolitana) ---------- */
+// pontosSets: vitória por 2x0 = 3 pts; 2x1 = 2 pts para quem vence e 1 pt para quem perde (ganhou um set); 0x2 = 0
+export const REGRA = { pontosSets: false };
+export function definirRegra(o) { Object.assign(REGRA, o || {}); }
+export function pontosDaPartida(esporte, j) {
+  if (esporte !== "biribol" || !REGRA.pontosSets || j.status !== "encerrado") return null;
+  const r = resultado(esporte, j); if (!r.venc) return null;
+  if (j.wo) return { [r.venc]: 3 };
+  const ladoA = r.venc === j.a, sv = ladoA ? r.sb : r.sa; // sets do perdedor
+  return { [r.venc]: sv === 0 ? 3 : 2, [ladoA ? j.b : j.a]: sv > 0 ? 1 : 0 };
+}
+
 /* ---------- classificação do grupo ---------- */
 // critérios: vitórias, empates (basquete), saldo de pontos, pontos feitos, nome
 export function classificacao(esporte, equipesIds, jogos, nomeDe = id => id) {
   const t = {};
-  equipesIds.forEach(id => t[id] = { eid: id, j: 0, v: 0, e: 0, d: 0, pf: 0, pc: 0, saldo: 0 });
+  equipesIds.forEach(id => t[id] = { eid: id, j: 0, v: 0, e: 0, d: 0, pf: 0, pc: 0, saldo: 0, pg: 0 });
   jogos.forEach(j => {
     if (j.status !== "encerrado" || !t[j.a] || !t[j.b]) return;
     const r = resultado(esporte, j), A = t[j.a], B = t[j.b];
     A.j++; B.j++; A.pf += r.pa; A.pc += r.pb; B.pf += r.pb; B.pc += r.pa;
     if (r.empate) { A.e++; B.e++; }
     else if (r.venc === j.a) { A.v++; B.d++; } else if (r.venc === j.b) { B.v++; A.d++; }
+    const pg = pontosDaPartida(esporte, j); if (pg) { A.pg += pg[j.a] || 0; B.pg += pg[j.b] || 0; }
   });
   const rows = Object.values(t);
   rows.forEach(r => r.saldo = r.pf - r.pc);
-  rows.sort((x, y) => y.v - x.v || y.e - x.e || y.saldo - x.saldo || y.pf - x.pf || String(nomeDe(x.eid)).localeCompare(String(nomeDe(y.eid)), "pt-BR"));
+  rows.sort((x, y) => (REGRA.pontosSets ? y.pg - x.pg : 0) || y.v - x.v || y.e - x.e || y.saldo - x.saldo || y.pf - x.pf || String(nomeDe(x.eid)).localeCompare(String(nomeDe(y.eid)), "pt-BR"));
   return rows;
 }
 
@@ -164,7 +177,7 @@ export function ordenarQualificados(porGrupo /* [[rows classificados do grupo]] 
   const maxPos = Math.max(0, ...porGrupo.map(g => g.length));
   for (let p = 0; p < maxPos; p++) {
     const nivel = porGrupo.map((g, gi) => g[p] ? { ...g[p], grupo: gi, pos: p + 1 } : null).filter(Boolean);
-    nivel.sort((x, y) => y.v - x.v || y.e - x.e || y.saldo - x.saldo || y.pf - x.pf);
+    nivel.sort((x, y) => (REGRA.pontosSets ? (y.pg || 0) - (x.pg || 0) : 0) || y.v - x.v || y.e - x.e || y.saldo - x.saldo || y.pf - x.pf);
     out.push(...nivel);
   }
   return out;
