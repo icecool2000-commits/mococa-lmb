@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Placar ao vivo</title>
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@600;800&display=swap");
+:root{--escura:#0b2554;--cor:#1597dc;--destaque:#f6d20b}
+html,body{margin:0;background:transparent;overflow:hidden}
+body{font-family:Inter,"Segoe UI",Arial,sans-serif;padding:16px}
+body.baixo{display:flex;align-items:flex-end;min-height:calc(100vh - 32px)}
+#bug{display:none;flex-direction:column;width:max-content;max-width:calc(100vw - 32px);filter:drop-shadow(0 6px 14px rgba(0,0,0,.45))}
+#bug.on{display:flex}
+.corpo{display:flex;align-items:stretch;background:var(--escura);border-radius:12px 12px 0 12px;overflow:hidden}
+.logo{width:84px;background:#fff;display:flex;align-items:center;justify-content:center;padding:6px;box-sizing:border-box}
+.logo img{width:100%;height:auto;max-height:72px;object-fit:contain}
+.linhas{display:flex;flex-direction:column}
+.lin{display:flex;align-items:center;height:42px;color:#fff;border-bottom:1px solid rgba(255,255,255,.12)}
+.lin:last-child{border-bottom:0}
+.nome{font-weight:800;font-size:21px;text-transform:uppercase;letter-spacing:.02em;padding:0 16px;min-width:260px;max-width:440px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lin.venc .nome::after{content:" ✓";color:var(--destaque)}
+.sets{width:46px;height:100%;display:flex;align-items:center;justify-content:center;font-family:Anton,Impact,sans-serif;font-size:28px;background:rgba(255,255,255,.1)}
+.pts{width:64px;height:100%;display:flex;align-items:center;justify-content:center;font-family:Anton,Impact,sans-serif;font-size:30px;background:var(--destaque);color:var(--escura)}
+.tag{align-self:flex-start;background:var(--cor);color:#fff;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:.06em;padding:5px 14px;border-radius:0 0 10px 10px;margin-left:84px;white-space:nowrap}
+.vivo{color:#e0282e;background:#fff;border-radius:4px;padding:1px 6px;margin-right:8px}
+body.compacto .nome{min-width:120px;font-size:18px}body.compacto .logo{display:none}body.compacto .tag{margin-left:0}
+body.basquete .sets{display:none}
+</style>
+</head>
+<body>
+<div id="bug"><div class="corpo"><div class="logo"><img id="logo" alt=""></div><div class="linhas">
+  <div class="lin" id="la"><span class="nome" id="na"></span><span class="sets" id="sa"></span><span class="pts" id="pa"></span></div>
+  <div class="lin" id="lb"><span class="nome" id="nb"></span><span class="sets" id="sb"></span><span class="pts" id="pb"></span></div>
+</div></div><div class="tag" id="tag"></div></div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig } from "./config.js";
+let core; try { core = await import("./torneio-core.js"); } catch (e) { core = await import("./js/torneio-core.js"); }
+let av; try { av = await import("./aovivo.js"); } catch (e) { av = await import("./js/aovivo.js"); }
+const q = new URLSearchParams(location.search), APP = q.get("app") || "biribol";
+if (q.get("pos") === "baixo") document.body.classList.add("baixo");
+if (q.get("compacto") === "1") document.body.classList.add("compacto");
+const db = getFirestore(initializeApp(firebaseConfig));
+const $ = id => document.getElementById(id);
+let E = null, J = null, chave = "", unsub = null;
+function pintar() {
+  const bug = $("bug");
+  if (!E || !E.aoVivo || !E.jogoId) { bug.classList.remove("on"); return; }
+  const m = E.marca || {}, r = document.documentElement.style;
+  if (m.escura) r.setProperty("--escura", m.escura); if (m.cor) r.setProperty("--cor", m.cor); if (m.destaque) r.setProperty("--destaque", m.destaque);
+  if (m.logo && $("logo").getAttribute("src") !== m.logo) $("logo").src = m.logo;
+  const esp = E.esporte || "biribol"; document.body.classList.toggle("basquete", esp !== "biribol");
+  const p = av.placarVivo(esp, J) || { grande: [0, 0], atual: [0, 0], rotAtual: "", fim: false };
+  $("na").textContent = E.nomeA || "Equipe A"; $("nb").textContent = E.nomeB || "Equipe B";
+  $("sa").textContent = p.grande[0]; $("sb").textContent = p.grande[1];
+  $("pa").textContent = esp === "biribol" ? (p.fim ? p.grande[0] : p.atual[0]) : p.grande[0];
+  $("pb").textContent = esp === "biribol" ? (p.fim ? p.grande[1] : p.atual[1]) : p.grande[1];
+  $("la").classList.toggle("venc", !!(p.fim && J && p.venc === J.a)); $("lb").classList.toggle("venc", !!(p.fim && J && p.venc === J.b));
+  const tag = $("tag"); tag.textContent = "";
+  if (!p.fim) { const v = document.createElement("span"); v.className = "vivo"; v.textContent = "AO VIVO"; tag.append(v); }
+  tag.append([p.fim ? "Final do jogo" : esp === "biribol" ? p.rotAtual : p.rotAtual + " · " + (p.atual[0]) + "-" + (p.atual[1]), E.rotulo].filter(Boolean).join(" · "));
+  bug.classList.add("on");
+}
+onSnapshot(doc(db, "ao_vivo", APP), s => {
+  E = s.exists() ? s.data() : null;
+  const k = E && E.torneioId && E.jogoId ? (E.col) + "/" + E.torneioId + "/" + E.jogoId : "";
+  if (k !== chave) { chave = k; if (unsub) unsub(); unsub = null; J = null; if (k) unsub = onSnapshot(doc(db, E.col, E.torneioId, "jogos", E.jogoId), d => { J = d.exists() ? { id: d.id, ...d.data() } : null; pintar(); }); }
+  pintar();
+}, e => console.error(e));
+</script>
+</body>
+</html>

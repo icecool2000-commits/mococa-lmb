@@ -4,6 +4,7 @@ import * as C from "./torneio-core.js";
 import { gerarDemo } from "./torneio-demo.js";
 import * as X from "./exportar.js";
 import { montarMidias } from "./midias.js";
+import { montarAoVivo } from "./aovivo.js";
 
 export function montarTorneio(ctx) {
   const { db, fs, esporte, col, maxAtletas, toast } = ctx;
@@ -49,6 +50,14 @@ export function montarTorneio(ctx) {
       perguntar: (m, f, r) => perguntar(m, f, r), torneio: () => T ? { id: T.id, nome: T.nome } : null, autor: ctx.autor, render: () => render() });
     render();
   }, 0);
+  // aba Ao vivo (YouTube + placar da súmula + Instagram), se o app configurar ctx.aoVivo = { app, canal:{ id, handle }, instagram }
+  let AV = null;
+  if (ctx.aoVivo) setTimeout(() => {
+    AV = montarAoVivo({ db, fs: ctx.fs, h, toast, esporte, col, app: ctx.aoVivo.app, canal: ctx.aoVivo.canal, canalDe: ctx.aoVivo.canalDe, instagram: ctx.aoVivo.instagram, marca: ctx.marca, autor: ctx.autor,
+      podeEditar: () => podeEditar(), perguntar: (m, f, r) => perguntar(m, f, r), torneio: () => T, jogos: () => jogos, torneioId: () => T && T.id,
+      abrirSumula: jid => { if (jogos.find(j => j.id === jid)) abrirSumula(jid); }, mudouVivo: () => render() });
+    render();
+  }, 0);
   const SERIES_OK = !!ctx.formatoSeries;
   C.definirRegra({ pontosSets: !!ctx.pontosSets });
   const PTS = () => C.REGRA.pontosSets;
@@ -86,7 +95,16 @@ export function montarTorneio(ctx) {
   /* ---------- tela principal ---------- */
   function render() {
     const foco = document.activeElement && document.activeElement.id;
-    root.textContent = "";
+    // a aba Ao vivo fica no lugar (o vídeo do YouTube não pode recarregar a cada ponto marcado)
+    const fica = AV && aba === "aovivo" && T && !formNovo ? AV.elemento : null;
+    [...root.childNodes].forEach(c => { if (c !== fica) c.remove(); });
+    let antesDoFica = true;
+    const pos = root.append.bind(root);
+    root.append = (...ns) => ns.forEach(n => { if (n === fica) { antesDoFica = false; if (n.parentNode !== root) pos(n); } else if (antesDoFica && fica && fica.parentNode === root) root.insertBefore(n, fica); else pos(n); });
+    try { renderCorpo(); } finally { delete root.append; }
+    if (foco) { const f = document.getElementById(foco); if (f && f.tagName === "INPUT" && f !== document.activeElement) f.focus(); }
+  }
+  function renderCorpo() {
     root.append(barraTopo());
     if (formNovo) { root.append(telaNovo()); return; }
     if (!T && confirmar) root.append(caixaConfirmar());
@@ -97,15 +115,15 @@ export function montarTorneio(ctx) {
         podeEditar() && h("div", { class: "t-linha" }, h("button", { type: "button", onclick: () => { formNovo = true; render(); } }, "Criar torneio"), botaoDemo())));
       return;
     }
-    const abas = [["geral", "Torneio"], ["equipes", "Equipes"], ["chaves", "Chaves e jogos"], ["stats", "Estatísticas"], ...(MID ? [["midias", "Mídias"]] : [])];
-    root.append(h("div", { class: "t-abas", role: "tablist" }, abas.map(([k, t]) =>
-      h("button", { type: "button", role: "tab", "aria-selected": String(aba === k), onclick: () => { aba = k; ls.set("aba", k); render(); } }, t))));
-    const corpo = { geral: telaGeral, equipes: telaEquipes, chaves: telaChaves, stats: telaStats, midias: MID ? MID.tela : null }[aba] || telaGeral;
+    const vivo = AV && AV.estado() && AV.estado().aoVivo;
+    const abas = [["geral", "Torneio"], ["equipes", "Equipes"], ["chaves", "Chaves e jogos"], ["stats", "Estatísticas"], ...(MID ? [["midias", "Mídias"]] : []), ...(AV ? [["aovivo", vivo ? "● Ao vivo" : "Ao vivo"]] : [])];
+    root.append(h("div", { class: "t-abas" + (abas.length > 5 ? " t-abas6" : ""), role: "tablist" }, abas.map(([k, t]) =>
+      h("button", { type: "button", role: "tab", class: k === "aovivo" && vivo ? "t-aba-vivo" : null, "aria-selected": String(aba === k), onclick: () => { aba = k; ls.set("aba", k); render(); } }, t))));
+    const corpo = { geral: telaGeral, equipes: telaEquipes, chaves: telaChaves, stats: telaStats, midias: MID ? MID.tela : null, aovivo: AV ? AV.tela : null }[aba] || telaGeral;
     root.append(corpo());
     if (sumulaJid) root.append(telaSumula());
     document.body.style.overflow = sumulaJid ? "hidden" : "";
     if (confirmar) root.append(caixaConfirmar());
-    if (foco) { const f = document.getElementById(foco); if (f && f.tagName === "INPUT") f.focus(); }
   }
 
   function barraTopo() {

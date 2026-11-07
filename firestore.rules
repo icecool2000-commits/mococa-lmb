@@ -127,6 +127,16 @@ service cloud.firestore {
       }
     }
 
+    // ===== AO VIVO (transmissão do YouTube/Instagram + jogo em destaque; histórico) =====
+    match /ao_vivo/{app} {
+      allow read: if true;
+      allow write: if podeTorneio();
+      match /historico/{h} {
+        allow read: if true;
+        allow write: if podeTorneio();
+      }
+    }
+
     // ===== MOCOCA NA LIGA (app do time) =====
     match /mococa_torneios/{t} {
       allow read: if true;
