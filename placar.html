@@ -78,7 +78,7 @@ const MARCA = {
 };
 function pintarRodizio() {
   const box = $("rz");
-  if (E && E.sim) J = E.sim;
+  if (E && E.sim) J = av.simNoTempo(E.esporte || "biribol", E, Date.now());
   const rz = COM_RZ && E && E.aoVivo && J && !E.manual && J.rodizio;
   const i = rz ? R.setComFormacao(rz, Math.max(0, (J.sets || []).length - 1)) : -1;
   if (i < 0) { box.classList.remove("on"); box.textContent = ""; return; }
@@ -90,7 +90,7 @@ function pintar() {
   pintarRodizio();
   const bug = $("bug"), faixa = $("faixa");
   if (E && E.manual) J = av.jogoManual(E.manual);
-  if (E && E.sim) J = E.sim;
+  if (E && E.sim) J = av.simNoTempo(E.esporte || "biribol", E, Date.now());
   const m = { ...(MARCA[APP] || {}), ...((E && E.marca) || {}) }, r = document.documentElement.style;
   if (m.escura) r.setProperty("--escura", m.escura); if (m.cor) r.setProperty("--cor", m.cor); if (m.destaque) r.setProperty("--destaque", m.destaque);
   for (const id of ["logo", "logo2"]) if (m.logo && $(id).getAttribute("src") !== m.logo) $(id).src = m.logo;
@@ -115,6 +115,9 @@ function pintar() {
   tag.append([p.fim ? "Final do jogo" : esp === "biribol" ? p.rotAtual : p.rotAtual + " · " + (p.atual[0]) + "-" + (p.atual[1]), E.rotulo].filter(Boolean).join(" · "));
   bug.classList.add("on");
 }
+// simulação automática: os pontos saem pelo relógio, sem depender do app estar aberto
+let passos = -1;
+setInterval(() => { if (!E || !E.aoVivo || !E.simAuto) return; const n = av.simPassos(E, Date.now()); if (n !== passos) { passos = n; pintar(); } }, 1000);
 onSnapshot(doc(db, "ao_vivo", APP), s => {
   E = s.exists() ? s.data() : null;
   const k = E && E.torneioId && E.jogoId ? (E.col) + "/" + E.torneioId + "/" + E.jogoId : "";

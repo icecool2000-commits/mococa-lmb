@@ -55,6 +55,51 @@ function hLocal(tag, props, ...kids) {
 // placar marcado à mão (modo treino/rachão, sem súmula): vira um "jogo" para as mesmas contas
 export function jogoManual(m) { return m ? { id: "manual", a: "A", b: "B", sets: (m.sets || []).map(x => ({ a: x.a || 0, b: x.b || 0 })), periodos: m.periodos, status: "andamento" } : null; }
 
+/* ---------- simulação: funções puras (usadas pelo app e pelo placar.html) ---------- */
+const SIM_AZUL = [["4", "Marcos"], ["3", "Paulo"], ["1", "Diego"], ["2", "Rafael"], ["5", "Lucas"], ["6", "Bruno"], ["7", "Caio"], ["8", "Tiago"]];
+const SIM_VERM = [["3", "André"], ["4", "Felipe"], ["2", "Gustavo"], ["1", "Renato"], ["5", "Vitor"], ["6", "Igor"], ["7", "Murilo"], ["8", "Otávio"]];
+export function novaSim() {
+  const atl = {}, el = { a: [], b: [] };
+  [["a", SIM_AZUL], ["b", SIM_VERM]].forEach(([l, lista]) => lista.forEach(([n, nome]) => { const id = "sim-" + l + n; atl[id] = { nome, num: Number(n) }; el[l].push(id); }));
+  // formação igual à ilustração: azul 4 no saque, 3 fundo, 1 rede esq., 2 rede dir.; vermelha 3 no saque, 4 fundo, 2 rede esq., 1 rede dir.
+  return { id: "sim", a: "A", b: "B", status: "andamento", sets: [{ a: 0, b: 0 }],
+    rodizio: { toucaA: "azul", atl, elenco: el, sets: [{ ladoA: "esq", saque: "a", pos: { a: el.a.slice(0, 4), b: el.b.slice(0, 4) }, ev: [] }] } };
+}
+// um ponto para o lado l; devolve { sim (novo) | null, msg }
+export function simPonto(esporte, simIn, l) {
+  if (C.resultado(esporte, simIn).fim) return { sim: null, msg: "Fim da simulação. Toque em Recomeçar para jogar de novo." };
+  const sim = JSON.parse(JSON.stringify(simIn)), i = sim.sets.length - 1, st = sim.sets[i];
+  let msg = "";
+  st[l] = (st[l] || 0) + 1;
+  R.registrarPonto(sim, i, l, 1);
+  if (C.setFechado(st.a, st.b, i)) {
+    const r = C.resultado(esporte, sim);
+    if (r.fim) { sim.status = "encerrado"; msg = "Fim da simulação: vitória da " + (r.venc === "A" ? "Equipe Azul" : "Equipe Vermelha") + "."; }
+    else { // novo set: trocam de lado, saca quem não sacou no início do set anterior, mesma formação inicial
+      const ant = sim.rodizio.sets[i];
+      sim.sets.push({ a: 0, b: 0 });
+      sim.rodizio.sets.push({ ladoA: ant.ladoA === "esq" ? "dir" : "esq", saque: R.outro(ant.saque), pos: { a: [...ant.pos.a], b: [...ant.pos.b] }, ev: [] });
+      msg = "Fim do set " + (i + 1) + ". As equipes trocaram de lado.";
+    }
+  }
+  return { sim, msg };
+}
+export const simPassos = (E, agora) => E && E.simAuto ? Math.max(0, Math.floor((agora - E.simAuto.inicio) / (E.simAuto.intervalo || 3000))) : 0;
+// estado da simulação agora: com automático ligado, aplica os pontos sorteados desde o início (mesmo sorteio em todas as telas)
+export function simNoTempo(esporte, E, agora) {
+  if (!E || !E.sim) return null;
+  if (!E.simAuto || !E.simAuto.base) return E.sim;
+  let sim = E.simAuto.base, seed = (E.simAuto.seed >>> 0) || 1;
+  const rnd = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const n = Math.min(simPassos(E, agora), 400);
+  for (let k = 0; k < n; k++) {
+    const est = R.estado(sim.rodizio, sim.rodizio.sets.length - 1), sac = est ? est.saque : "a";
+    const r = simPonto(esporte, sim, rnd() < 0.55 ? sac : R.outro(sac));
+    if (!r.sim) break; sim = r.sim;
+  }
+  return sim;
+}
+
 export function montarAoVivo(ctx) {
   const h = ctx.h || hLocal, MANUAL = !!ctx.placarManual;
   const { db, toast, esporte, col } = ctx, { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } = ctx.fs;
@@ -129,7 +174,7 @@ export function montarAoVivo(ctx) {
     boxTopo.append(cabecalho());
     atualizarPlayer();
     if (E && E.aoVivo && !srcAtual) boxDin.append(h("div", { class: "t-card" }, h("p", { class: "cap", text: "O canal do YouTube ainda não foi cadastrado no app." }), linkLive() && h("a", { class: "av-btn", href: linkLive(), target: "_blank", rel: "noopener" }, "Assistir no YouTube")));
-    if (!MANUAL && E && E.aoVivo && E.sim) { jogo = E.sim; boxDin.append(cartaoPlacar()); if (podeEditar()) boxDin.append(controlesSim()); }
+    if (!MANUAL && E && E.aoVivo && E.sim) { jogo = simAtual(); boxDin.append(cartaoPlacar()); if (podeEditar()) boxDin.append(controlesSim()); }
     else if (MANUAL && E && E.aoVivo && E.manual) { jogo = jogoManual(E.manual); boxDin.append(cartaoPlacar()); if (podeEditar()) boxDin.append(controlesPlacar()); }
     else if (E && E.jogoId) boxDin.append(cartaoPlacar());
     if (E && E.aoVivo && E.igAtivo && igUser()) boxDin.append(h("a", { class: "av-btn av-ig", href: "https://www.instagram.com/" + igUser() + "/live/", target: "_blank", rel: "noopener" }, "● Ao vivo também no Instagram @" + igUser()));
@@ -287,74 +332,60 @@ export function montarAoVivo(ctx) {
   }
 
   /* ---------- simulação (teste do placar e do rodízio sem jogo real) ---------- */
-  let simTimer = null;
-  const SIM_AZUL = [["4", "Marcos"], ["3", "Paulo"], ["1", "Diego"], ["2", "Rafael"], ["5", "Lucas"], ["6", "Bruno"], ["7", "Caio"], ["8", "Tiago"]];
-  const SIM_VERM = [["3", "André"], ["4", "Felipe"], ["2", "Gustavo"], ["1", "Renato"], ["5", "Vitor"], ["6", "Igor"], ["7", "Murilo"], ["8", "Otávio"]];
-  function novaSim() {
-    const atl = {}, el = { a: [], b: [] };
-    [["a", SIM_AZUL], ["b", SIM_VERM]].forEach(([l, lista]) => lista.forEach(([n, nome]) => { const id = "sim-" + l + n; atl[id] = { nome, num: Number(n) }; el[l].push(id); }));
-    // formação igual à ilustração: azul 4 no saque, 3 fundo, 1 rede esq., 2 rede dir.; vermelha 3 no saque, 4 fundo, 2 rede esq., 1 rede dir.
-    return { id: "sim", a: "A", b: "B", status: "andamento", sets: [{ a: 0, b: 0 }],
-      rodizio: { toucaA: "azul", atl, elenco: el, sets: [{ ladoA: "esq", saque: "a", pos: { a: el.a.slice(0, 4), b: el.b.slice(0, 4) }, ev: [] }] } };
-  }
+  // O automático não depende deste aparelho ficar aberto: grava só { inicio, seed, base } e cada tela
+  // (app e placar da live) calcula sozinha os pontos pelo relógio (simNoTempo).
+  const simAtual = () => (E && E.sim ? simNoTempo(esporte, E, Date.now()) : null);
+  let simN = -1;
+  setInterval(() => { if (!E || !E.aoVivo || !E.simAuto || !sec.isConnected) return; const n = simPassos(E, Date.now()); if (n !== simN) { simN = n; atualizar(); } }, 1000);
   function cartaoSim() {
     return h("div", { class: "t-card t-form" },
       h("h3", { text: "Testar sem jogo real" }),
       h("p", { class: "cap", text: "Cria uma partida de simulação (Equipe Azul x Equipe Vermelha, já com a formação confirmada) e coloca no ar aqui e no placar da live (Prism/Streamlabs/OBS). Nada entra no torneio nem no histórico." }),
       h("button", { type: "button", onclick: async () => {
         try { await setDoc(refEstado, { aoVivo: true, titulo: "Teste de transmissão", inicio: Date.now(), videoId: null, videoIdAuto: null, igAtivo: false, col, torneioId: null, jogoId: null, torneioNome: null,
-          nomeA: "Equipe Azul", nomeB: "Equipe Vermelha", rotulo: "Simulação", esporte, marca: ctx.marca || null, manual: null, sim: novaSim(), atualizado: Date.now() }, { merge: true });
+          nomeA: "Equipe Azul", nomeB: "Equipe Vermelha", rotulo: "Simulação", esporte, marca: ctx.marca || null, manual: null, sim: novaSim(), simAuto: null, atualizado: Date.now() }, { merge: true });
           rasc = null; painelSujo = true; toast("Simulação no ar. Marque pontos ou ligue o automático."); }
         catch (e) { console.error(e); toast("Não deu para começar. Verifique se você está logado como editor."); }
       } }, "Simular partida"));
   }
-  async function salvarSim(sim) { E.sim = sim; atualizar(); try { await setDoc(refEstado, { sim, atualizado: Date.now() }, { merge: true }); } catch (e) { console.error(e); toast("Não deu para salvar a simulação."); } }
+  async function salvarSim(sim, extra) {
+    E.sim = sim; E.simAuto = extra && "simAuto" in extra ? extra.simAuto : null; atualizar();
+    try { await setDoc(refEstado, { sim, simAuto: E.simAuto, atualizado: Date.now() }, { merge: true }); } catch (e) { console.error(e); toast("Não deu para salvar a simulação."); }
+  }
   function pontoSim(l) {
-    const sim = JSON.parse(JSON.stringify(E.sim)), i = sim.sets.length - 1, st = sim.sets[i];
-    if (C.resultado(esporte, sim).fim) { pararAuto(); toast("Fim da simulação. Toque em Recomeçar para jogar de novo."); return; }
-    st[l] = (st[l] || 0) + 1;
-    R.registrarPonto(sim, i, l, 1);
-    if (C.setFechado(st.a, st.b, i)) {
-      const r = C.resultado(esporte, sim);
-      if (r.fim) { sim.status = "encerrado"; pararAuto(); toast("Fim da simulação: vitória da " + (r.venc === "A" ? "Equipe Azul" : "Equipe Vermelha") + "."); }
-      else { // novo set: trocam de lado, saca quem não sacou no início do set anterior, mesma formação inicial
-        const ant = sim.rodizio.sets[i];
-        sim.sets.push({ a: 0, b: 0 });
-        sim.rodizio.sets.push({ ladoA: ant.ladoA === "esq" ? "dir" : "esq", saque: R.outro(ant.saque), pos: { a: [...ant.pos.a], b: [...ant.pos.b] }, ev: [] });
-        toast("Fim do set " + (i + 1) + ". As equipes trocaram de lado.");
-      }
-    }
-    salvarSim(sim);
+    const r = simPonto(esporte, simAtual(), l);
+    if (r.msg) toast(r.msg);
+    if (r.sim) salvarSim(r.sim); // marcar à mão para o automático
   }
   function desfazerSim() {
-    const sim = JSON.parse(JSON.stringify(E.sim));
+    const sim = JSON.parse(JSON.stringify(simAtual()));
     let i = sim.sets.length - 1;
     if (!(sim.sets[i].a || sim.sets[i].b) && i > 0) { sim.sets.pop(); sim.rodizio.sets.pop(); i--; }
     const ev = sim.rodizio.sets[i].ev, l = ev.pop(); if (!l) return;
     sim.sets[i][l] = Math.max(0, sim.sets[i][l] - 1); sim.status = "andamento";
     salvarSim(sim);
   }
-  function pararAuto() { if (simTimer) { clearInterval(simTimer); simTimer = null; } }
   function controlesSim() {
-    const est = R.estado(E.sim.rodizio, E.sim.rodizio.sets.length - 1) || { saque: "a" };
+    const sim = simAtual(), auto = !!E.simAuto, fim = C.resultado(esporte, sim).fim;
+    const est = R.estado(sim.rodizio, sim.rodizio.sets.length - 1) || { saque: "a" };
     const bt = (l, nome, cor) => h("button", { type: "button", class: "rz-ponto", style: "--c:" + cor[0] + ";--e:" + cor[1], onclick: () => pontoSim(l) }, h("small", { text: est.saque === l ? "sacando" : "recebendo" }), "Ponto " + nome);
     return h("div", { class: "t-card av-ctl" },
       h("span", { class: "t-sub", text: "Simulação · marcar pontos" }),
+      fim && h("p", { class: "cap", text: "Fim da simulação. Toque em Recomeçar para jogar de novo." }),
       h("div", { class: "rz-pts" }, bt("a", "Azul", ["#1f5fd1", "#123b8a"]), bt("b", "Vermelha", ["#d8262d", "#8f1218"])),
       h("div", { class: "t-linha" },
-        h("button", { type: "button", class: simTimer ? "" : "ghost", onclick: () => {
-          if (simTimer) pararAuto();
-          else simTimer = setInterval(() => { if (!E || !E.sim || !sec.isConnected) return pararAuto(); const s2 = R.estado(E.sim.rodizio, E.sim.rodizio.sets.length - 1); const sac = s2 ? s2.saque : "a"; pontoSim(Math.random() < 0.55 ? sac : R.outro(sac)); }, 3000);
-          atualizar();
-        } }, simTimer ? "⏸ Parar automático" : "▶ Pontos automáticos (a cada 3 s)"),
+        h("button", { type: "button", class: auto ? "" : "ghost", onclick: () => {
+          const atual = simAtual();
+          if (auto) salvarSim(atual);
+          else salvarSim(atual, { simAuto: { inicio: Date.now(), seed: Math.floor(Math.random() * 1e9), intervalo: 3000, base: atual } });
+        } }, auto ? "⏸ Parar automático" : "▶ Pontos automáticos (a cada 3 s)"),
         h("button", { type: "button", class: "ghost", onclick: desfazerSim }, "Desfazer"),
-        h("button", { type: "button", class: "ghost", onclick: () => { pararAuto(); salvarSim(novaSim()); } }, "Recomeçar"),
+        h("button", { type: "button", class: "ghost", onclick: () => salvarSim(novaSim()) }, "Recomeçar"),
         h("button", { type: "button", class: "danger", onclick: async () => {
-          pararAuto();
-          try { await setDoc(refEstado, { aoVivo: false, sim: null, fim: Date.now() }, { merge: true }); rasc = null; painelSujo = true; toast("Simulação encerrada."); }
+          try { await setDoc(refEstado, { aoVivo: false, sim: null, simAuto: null, fim: Date.now() }, { merge: true }); rasc = null; painelSujo = true; toast("Simulação encerrada."); }
           catch (e) { console.error(e); toast("Não deu para encerrar."); }
         } }, "Encerrar simulação")),
-      h("p", { class: "cap", text: "Ponto de quem saca: não roda. Ponto de quem recebe: roda e passa a sacar. Deixe o Prism aberto com o link do placar para ver tudo mudando na live." }));
+      h("p", { class: "cap", text: auto ? "Automático ligado: os pontos continuam saindo na live mesmo com o app fechado ou em segundo plano." : "Ponto de quem saca: não roda. Ponto de quem recebe: roda e passa a sacar. Deixe o Prism aberto com o link do placar para ver tudo mudando na live." }));
   }
 
   // botões do placar manual (biribol: sets de 21/21/15 com 2 de vantagem, como na súmula)
