@@ -3,6 +3,7 @@
 // Firestore: ao_vivo/{app} = estado da transmissão + canal; ao_vivo/{app}/historico/{id} = transmissões encerradas.
 // placar.html?app={app} é o placar transparente para OBS / Streamlabs / Prism (lê o mesmo documento).
 import * as C from "./torneio-core.js";
+import * as R from "./rodizio.js";
 
 const dataHora = ms => { if (!ms) return ""; const d = new Date(ms), p = n => String(n).padStart(2, "0"); return p(d.getDate()) + "/" + p(d.getMonth() + 1) + "/" + d.getFullYear() + " " + p(d.getHours()) + ":" + p(d.getMinutes()); };
 
@@ -164,7 +165,16 @@ export function montarAoVivo(ctx) {
         h("b", { class: "av-eq dir" + cls(1), text: nB })),
       !p.fim && !p.wo && h("div", { class: "av-atual" }, h("span", { text: p.atual[0] }), h("small", { text: p.rotAtual }), h("span", { text: p.atual[1] })),
       p.parciais.length > 0 && h("p", { class: "cap t-centro", text: (esporte === "biribol" ? "Sets: " : "") + p.parciais.join(" · ") }),
+      rodizioVivo(nA, nB),
       !MANUAL && ctx.abrirSumula && ctx.torneioId && ctx.torneioId() === E.torneioId && h("button", { type: "button", class: "ghost", onclick: () => ctx.abrirSumula(E.jogoId) }, podeEditar() ? "Abrir súmula (marcar pontos)" : "Ver súmula"));
+  }
+
+  // piscina com o rodízio (quando o mesário cadastrou a formação na súmula)
+  function rodizioVivo(nA, nB) {
+    const rz = jogo && jogo.rodizio; if (!rz || esporte !== "biribol") return null;
+    const iSet = Math.max(0, (jogo.sets || []).length - 1), i = R.setComFormacao(rz, iSet); if (i < 0) return null;
+    const est = R.estado(rz, i), nomes = { a: nA, b: nB };
+    return h("div", { class: "rz rz-vivo" }, h("div", { class: "rz-box" }, R.piscina({ rz, est, nomes, chave: "vivo:" + jogo.id + ":" + i })), R.legenda(h, rz, est, nomes));
   }
 
   function cartaoHistorico() {

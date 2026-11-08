@@ -5,6 +5,7 @@ import { gerarDemo } from "./torneio-demo.js";
 import * as X from "./exportar.js";
 import { montarMidias } from "./midias.js";
 import { montarAoVivo } from "./aovivo.js";
+import * as R from "./rodizio.js";
 
 export function montarTorneio(ctx) {
   const { db, fs, esporte, col, maxAtletas, toast } = ctx;
@@ -59,6 +60,7 @@ export function montarTorneio(ctx) {
     render();
   }, 0);
   const SERIES_OK = !!ctx.formatoSeries;
+  const ROD = !!ctx.rodizio && esporte === "biribol"; // rodízio dos jogadores na súmula (Liga)
   C.definirRegra({ pontosSets: !!ctx.pontosSets });
   const PTS = () => C.REGRA.pontosSets;
   const TXT_CRIT = () => PTS() ? "Pontos: 2x0 = 3 pts; 2x1 = 2 pts para quem vence e 1 pt para quem perde. Desempate: pontos marcados." : "Desempate: vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos.";
@@ -805,6 +807,10 @@ export function montarTorneio(ctx) {
       h("div", { class: "t-x", text: "x" }),
       h("div", { class: "t-pe" + (fim && r.venc === j.b ? " venc" : "") }, h("span", { text: eqNome(j.b) }), h("b", { text: BIR ? r.sb : r.pb }))));
     if (fim) painel.append(h("p", { class: "t-res", text: r.empate ? "Empate" : "Vitória de " + eqNome(r.venc) + (j.periodos && j.periodos.some(p => p.n === "BO") ? " na bola de ouro" : j.periodos && j.periodos.some(p => /^P/.test(p.n)) ? " na prorrogação" : "") }));
+    // rodízio (formação, saque, substituições e a piscina com os jogadores) logo abaixo do placar
+    if (ROD && j.a && j.b && !j.wo) painel.append(R.painel({ h, j, nomeA: eqNome(j.a), nomeB: eqNome(j.b), ed, fim, toast, render,
+      atletas: { a: ((eqDe(j.a) || {}).atletas || []), b: ((eqDe(j.b) || {}).atletas || []) },
+      salvar: () => { if (j.status === "agendado") j.status = "andamento"; salvarSumula(true); }, ponto: (l, d) => pontoEquipe(l, d) }));
     if (fim && !j.wo) painel.append(h("div", { class: "t-linha t-sum-exp" }, h("span", { class: "cap", text: "Gerar súmula:" }),
       h("button", { type: "button", class: "ghost t-mini", onclick: () => gerarSumula(j, "pdf") }, "PDF"), h("button", { type: "button", class: "ghost t-mini", onclick: () => gerarSumula(j, "xlsx") }, "Excel")));
     BIR ? sumulaBiribol(painel, j, ed, fim) : sumulaBasquete(painel, j, ed, fim);
@@ -870,6 +876,7 @@ export function montarTorneio(ctx) {
       if (d > 0 && setFechado(s, i)) { toast("Set encerrado."); return false; }
       if (d < 0 && (s[lado] || 0) + d < 0) { toast("O placar do set já está zerado para essa equipe."); return false; }
       s[lado] = (s[lado] || 0) + d;
+      if (ROD) R.registrarPonto(j, i, lado, d);
       if (setFechado(s, i)) {
         const r = C.resultadoBiribol(j);
         if (r.fim) { j.status = "encerrado"; j.venc = r.venc; toast("Fim de jogo: vitória de " + eqNome(r.venc) + "!"); }

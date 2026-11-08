@@ -261,3 +261,39 @@ button.mini{padding:4px 10px;font-size:12px}
 .av-ctl-g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .av-ctl-g button{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .av-mais{font-size:18px;padding:16px 8px}
+/* Rodízio */
+.rz{display:flex;flex-direction:column;gap:10px;margin:6px 0 4px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.rz-tit{margin:0;font-size:16px}
+.rz-box{width:100%;max-width:100%;overflow:hidden;border-radius:12px;line-height:0;box-shadow:0 2px 10px rgb(0 0 0 / .18)}
+.rz-svg{width:100%;height:auto;display:block}
+.rz-jog{transition:transform .9s cubic-bezier(.45,.05,.3,1),opacity .6s}
+@media (prefers-reduced-motion:reduce){.rz-jog{transition:none}}
+.rz-anel{animation:rzpulsa 1.4s ease-in-out infinite}
+@keyframes rzpulsa{50%{stroke-opacity:.35}}
+.rz-leg{display:flex;flex-direction:column;gap:6px}
+.rz-leg p{margin:0}
+.rz-saque{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rz-bola{width:16px;height:16px;border-radius:50%;background:#ffd84a;border:2px solid #a57c00;flex:none}
+.rz-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 9px 2px 4px;border-radius:999px;background:var(--soft);font-size:13px;margin:2px 4px 2px 0}
+.rz-chip::before{content:"";width:12px;height:12px;border-radius:50%;background:var(--c)}
+.rz-res{display:flex;flex-direction:column;gap:2px}
+.rz-ctl{display:flex;flex-direction:column;gap:8px}
+.rz-ctl p{margin:0}
+.rz-pts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rz-ponto{display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px 6px;background:var(--c);color:#fff;border:2px solid var(--e);border-radius:12px;font-size:16px;font-weight:700;min-width:0;overflow-wrap:anywhere}
+.rz-ponto small{font-size:11px;font-weight:600;opacity:.85;text-transform:uppercase;letter-spacing:.06em}
+.rz-sub{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px dashed var(--line);border-radius:10px}
+.rz-form{display:flex;flex-direction:column;gap:10px}
+.rz-form > p{margin:0}
+.rz-opc{display:flex;flex-direction:column;gap:4px}
+.rz-eq{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:12px;border:1px solid var(--line);border-left:6px solid var(--c)}
+.rz-eqnome{font-size:15px}
+.rz-nums{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px}
+.rz-num{display:flex;align-items:center;gap:6px;font-size:13px;min-width:0}
+.rz-num input{width:54px;flex:none;text-align:center}
+.rz-num span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rz-poss{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rz-poss select{width:100%;min-width:0}
+.rz-vivo{margin:0;padding:0;border:0;background:none}
+.rz-ponto{white-space:normal;font-size:15px;line-height:1.2;text-align:center}
+.rz-num input{width:60px;padding:6px 2px;font-size:16px}
