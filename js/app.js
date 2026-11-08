@@ -25,7 +25,7 @@ export function montarApp(ctx) {
   const torneio = montarTorneio({ db, fs: { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch }, esporte: "biribol", col: "mococa_torneios", maxAtletas: 8, toast,
     root: torRoot, podeEditar, nomeDemo: "Liga Metropolitana (simulação)", formatoSeries: true, pontosSets: true, autor: ctx.autor,
     rodizio: true,
-    aoVivo: { app: "mococa", canal: { id: "UCv2QFBwysAf_ochScxkfDmA", handle: "LMB-LigaMetropolitanaBiribol" }, canalDe: "lmb", instagram: "biribol_mococa" },
+    aoVivo: { app: "mococa", canal: { id: "UC8NzFZxYbM-XXdNFXOEk6vw", handle: "ligametropolitanadebiribol" }, canalDe: "lmb", instagram: "biribol_mococa" },
     midias: { app: "mococa", perfis: [{ usuario: "biribol_mococa", nome: "Biribol Mococa" }], hashtags: "#biribol #biribolmococa #ligametropolitana" },
     equipeCasa: () => ({ nome: CASA, atletas: [...ativos()].sort((a, b) => (a.num ?? 999) - (b.num ?? 999)) }),
     marca: { titulo: "Biribol Mococa na Liga", logo: "img/logo.jpg", escura: "#061535", cor: "#1a679f", destaque: "#e3b90f" } });
