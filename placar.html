@@ -26,6 +26,13 @@ body.baixo{display:flex;align-items:flex-end;min-height:calc(100vh - 32px)}
 .vivo{color:#e0282e;background:#fff;border-radius:4px;padding:1px 6px;margin-right:8px}
 body.compacto .nome{min-width:120px;font-size:18px}body.compacto .logo{display:none}body.compacto .tag{margin-left:0}
 body.basquete .sets{display:none}
+#faixa{display:none;align-items:stretch;width:max-content;max-width:calc(100vw - 32px);background:var(--escura);border-radius:12px;overflow:hidden;filter:drop-shadow(0 6px 14px rgba(0,0,0,.45))}
+#faixa.on{display:flex}
+#faixa .logo{width:64px}
+#faixa .txt{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:8px 18px;color:#fff}
+#faixa b{font-weight:800;font-size:20px;text-transform:uppercase;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:620px}
+#faixa small{font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--destaque)}
+body.compacto #faixa .logo{display:none}
 </style>
 </head>
 <body>
@@ -33,6 +40,7 @@ body.basquete .sets{display:none}
   <div class="lin" id="la"><span class="nome" id="na"></span><span class="sets" id="sa"></span><span class="pts" id="pa"></span></div>
   <div class="lin" id="lb"><span class="nome" id="nb"></span><span class="sets" id="sb"></span><span class="pts" id="pb"></span></div>
 </div></div><div class="tag" id="tag"></div></div>
+<div id="faixa"><div class="logo"><img id="logo2" alt=""></div><div class="txt"><small id="f1"></small><b id="f2"></b></div></div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -45,13 +53,29 @@ if (q.get("compacto") === "1") document.body.classList.add("compacto");
 const db = getFirestore(initializeApp(firebaseConfig));
 const $ = id => document.getElementById(id);
 let E = null, J = null, chave = "", unsub = null;
+// marca padrão de cada app (vale antes da primeira transmissão)
+const MARCA = {
+  lmb: { titulo: "Liga Metropolitana de Biribol", logo: "logo.png", escura: "#0b2554", cor: "#1597dc", destaque: "#f6d20b" },
+  mococa: { titulo: "Biribol Mococa na Liga", logo: "img/logo.jpg", escura: "#061535", cor: "#1a679f", destaque: "#e3b90f" },
+  biribol: { titulo: "Biribol Oficial Mococa", logo: "logo.jpg", escura: "#1f1f23", cor: "#d81f2a", destaque: "#e2626b" },
+  "biribol-treino": { titulo: "Biribol Oficial Mococa", logo: "logo.jpg", escura: "#1f1f23", cor: "#d81f2a", destaque: "#e2626b" },
+  basquete: { titulo: "Família Basquete Mococa", logo: "logo.jpg", escura: "#0c0c0d", cor: "#3f9a3c", destaque: "#ec6a2c" }
+};
 function pintar() {
-  const bug = $("bug");
+  const bug = $("bug"), faixa = $("faixa");
   if (E && E.manual) J = av.jogoManual(E.manual);
-  if (!E || !E.aoVivo || !(E.jogoId || E.manual)) { bug.classList.remove("on"); return; }
-  const m = E.marca || {}, r = document.documentElement.style;
+  const m = { ...(MARCA[APP] || {}), ...((E && E.marca) || {}) }, r = document.documentElement.style;
   if (m.escura) r.setProperty("--escura", m.escura); if (m.cor) r.setProperty("--cor", m.cor); if (m.destaque) r.setProperty("--destaque", m.destaque);
-  if (m.logo && $("logo").getAttribute("src") !== m.logo) $("logo").src = m.logo;
+  for (const id of ["logo", "logo2"]) if (m.logo && $(id).getAttribute("src") !== m.logo) $(id).src = m.logo;
+  if (!E || !E.aoVivo || !(E.jogoId || E.manual)) {
+    // sem jogo escolhido: mostra a faixa com a marca (e "ao vivo" + título quando a transmissão está marcada no app)
+    bug.classList.remove("on");
+    if (q.get("vazio") === "0") { faixa.classList.remove("on"); return; }
+    $("f1").textContent = E && E.aoVivo ? "● Ao vivo" : "Transmissão";
+    $("f2").textContent = E && E.aoVivo && E.titulo ? E.titulo : m.titulo || "";
+    faixa.classList.add("on"); return;
+  }
+  faixa.classList.remove("on");
   const esp = E.esporte || "biribol"; document.body.classList.toggle("basquete", esp !== "biribol");
   const p = av.placarVivo(esp, J) || { grande: [0, 0], atual: [0, 0], rotAtual: "", fim: false };
   $("na").textContent = E.nomeA || "Equipe A"; $("nb").textContent = E.nomeB || "Equipe B";

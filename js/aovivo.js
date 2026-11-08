@@ -351,7 +351,8 @@ export function montarAoVivo(ctx) {
         h("li", { text: "OBS / Streamlabs Desktop: Fontes › + › Navegador (Browser). Cole o link, largura 1280 e altura 200, e posicione no topo do vídeo." }),
         h("li", { text: "Prism Live (celular): Widget › Web (ou Navegador) e cole o link." }),
         h("li", { text: "Para placar embaixo, use o link com &pos=baixo; para só os números, &compacto=1." }),
-        h("li", { text: "O placar mostra o jogo em destaque escolhido em \"Transmissão no ar\". Troque o jogo aqui e ele muda na live." })));
+        h("li", { text: "O placar mostra o jogo em destaque escolhido em \"Transmissão no ar\". Troque o jogo aqui e ele muda na live." }),
+        h("li", { text: "Sem transmissão começada aqui no app, ou sem jogo escolhido, aparece só a faixa com a logo e o título. Os números entram quando você toca em Começar transmissão com um jogo escolhido." })));
   }
 
   return { tela, elemento: sec, estado: () => E };
