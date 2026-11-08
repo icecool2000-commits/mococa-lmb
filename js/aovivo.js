@@ -78,10 +78,10 @@ export function simPonto(esporte, simIn, l) {
     else { // novo set: trocam de lado, saca quem não sacou no início do set anterior, mesma formação inicial
       const ant = sim.rodizio.sets[i];
       sim.sets.push({ a: 0, b: 0 });
-      sim.rodizio.sets.push({ ladoA: ant.ladoA === "esq" ? "dir" : "esq", saque: R.outro(ant.saque), pos: { a: [...ant.pos.a], b: [...ant.pos.b] }, ev: [] });
+      sim.rodizio.sets.push({ ladoA: R.estado(sim.rodizio, i).ladoA === "esq" ? "dir" : "esq", saque: R.outro(ant.saque), pos: { a: [...ant.pos.a], b: [...ant.pos.b] }, ev: [] });
       msg = "Fim do set " + (i + 1) + ". As equipes trocaram de lado.";
     }
-  }
+  } else if (i === 2 && st[l] === 8 && st[R.outro(l)] < 8) msg = "Tiebreak: 8 pontos! As equipes trocaram de lado.";
   return { sim, msg };
 }
 export const simPassos = (E, agora) => E && E.simAuto ? Math.max(0, Math.floor((agora - E.simAuto.inicio) / (E.simAuto.intervalo || 3000))) : 0;
@@ -372,7 +372,7 @@ export function montarAoVivo(ctx) {
     return h("div", { class: "t-card av-ctl" },
       h("span", { class: "t-sub", text: "Simulação · marcar pontos" }),
       fim && h("p", { class: "cap", text: "Fim da simulação. Toque em Recomeçar para jogar de novo." }),
-      h("div", { class: "rz-pts" }, bt("a", "Azul", ["#1f5fd1", "#123b8a"]), bt("b", "Vermelha", ["#d8262d", "#8f1218"])),
+      h("div", { class: "rz-pts" }, (est.ladoA === "dir" ? [bt("b", "Vermelha", ["#d8262d", "#8f1218"]), bt("a", "Azul", ["#1f5fd1", "#123b8a"])] : [bt("a", "Azul", ["#1f5fd1", "#123b8a"]), bt("b", "Vermelha", ["#d8262d", "#8f1218"])])),
       h("div", { class: "t-linha" },
         h("button", { type: "button", class: auto ? "" : "ghost", onclick: () => {
           const atual = simAtual();

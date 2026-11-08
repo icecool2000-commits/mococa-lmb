@@ -23,11 +23,14 @@ export function estado(rz, i) {
   const pos = { a: [...st.pos.a], b: [...st.pos.b] };
   let saque = st.saque || "a", ult = null, pontos = 0;
   const pl = { a: 0, b: 0 }, rallies = [];
+  let ladoA = st.ladoA || "esq", trocou = false;
   (st.ev || []).forEach((e, k) => {
     if (e === "a" || e === "b") {
       rallies.push({ k, sac: saque, aid: pos[saque][0], antes: pl.a + "-" + pl.b, ganhou: e });
       pl[e]++;
       pontos++;
+      // tiebreak: quando uma equipe chega a 8 pontos, as equipes trocam de lado (uma vez)
+      if (i === 2 && !trocou && (pl.a >= 8 || pl.b >= 8)) { trocou = true; ladoA = ladoA === "esq" ? "dir" : "esq"; }
       if (e !== saque) { pos[e] = girar(pos[e]); saque = e; ult = { tipo: "rodou", lado: e }; }
       else ult = { tipo: "manteve", lado: e };
     } else if (e && e.t === "s") {
@@ -36,7 +39,12 @@ export function estado(rz, i) {
     }
   });
   const reservas = l => ((rz.elenco && rz.elenco[l]) || []).filter(id => !pos[l].includes(id));
-  return { pos, saque, ladoA: st.ladoA || "esq", ult, pontos, rallies, reservas: { a: reservas("a"), b: reservas("b") } };
+  return { pos, saque, ladoA, trocouTb: trocou, ult, pontos, rallies, reservas: { a: reservas("a"), b: reservas("b") } };
+}
+// equipes na ordem em que estão na piscina (esquerda, direita) no set i; sem formação = ["a","b"]
+export function ordemLados(rz, i) {
+  const e = rz && rz.sets && rz.sets[i] && rz.sets[i].pos ? estado(rz, i) : null;
+  return e && e.ladoA === "dir" ? ["b", "a"] : ["a", "b"];
 }
 // último set (até o índice "ate") que tem formação
 export function setComFormacao(rz, ate) {
@@ -197,7 +205,7 @@ function novoRasc(o, iSet, editar) {
   const src = editar && atual ? atual : ant;
   return {
     jid: o.j.id, set: iSet, toucaA: rz.toucaA || "azul", num,
-    ladoA: editar && atual ? atual.ladoA : ant ? (ant.ladoA === "esq" ? "dir" : "esq") : "esq",
+    ladoA: editar && atual ? atual.ladoA : ant && ant.pos ? (estado(rz, iSet - 1).ladoA === "esq" ? "dir" : "esq") : "esq",
     saque: editar && atual ? atual.saque : ant ? outro(ant.saque) : "a",
     pos: { a: src && src.pos ? [...src.pos.a] : base("a"), b: src && src.pos ? [...src.pos.b] : base("b") }
   };
@@ -216,6 +224,9 @@ function formFormacao(o, iSet) {
     h("div", { class: "rz-opc" }, h("span", { class: "t-sub", text: "Touca azul" }), h("div", { class: "chips" }, ["a", "b"].map(l => chip(nomes[l], (l === "a") === (r.toucaA === "azul"), () => { r.toucaA = l === "a" ? "azul" : "vermelha"; })))),
     h("div", { class: "rz-opc" }, h("span", { class: "t-sub", text: "Do lado esquerdo" }), h("div", { class: "chips" }, ["a", "b"].map(l => chip(nomes[l], (l === "a") === (r.ladoA === "esq"), () => { r.ladoA = l === "a" ? "esq" : "dir"; })))),
     h("div", { class: "rz-opc" }, h("span", { class: "t-sub", text: "Começa sacando" }), h("div", { class: "chips" }, ["a", "b"].map(l => chip("🏐 " + nomes[l], r.saque === l, () => { r.saque = l; })))));
+  const antF = iSet > 0 && o.j.rodizio && o.j.rodizio.sets && o.j.rodizio.sets[iSet - 1];
+  if (antF && antF.pos && r.ladoA === estado(o.j.rodizio, iSet - 1).ladoA)
+    f.append(h("div", { class: "rz-alerta erro" }, h("b", { text: "⚠ Troca de lado" }), h("span", { text: "Ao fim de cada set as equipes trocam de lado. Aqui está igual ao fim do set anterior: confira \"Do lado esquerdo\"." })));
   // prévia
   if (ok) f.append(h("div", { class: "rz-box" }, piscina({ rz: rzPrev, est: { pos: r.pos, saque: r.saque, ladoA: r.ladoA, reservas: { a: [], b: [] } }, nomes, chave: "prev:" + j.id })));
   // por equipe: números e posições
@@ -357,14 +368,18 @@ function controles(o, rz, est, iSet) {
         o.ponto(outro(a.l), 1);
       } }, "Aplicar 32.2 (perde o rally)"),
       h("button", { type: "button", class: "ghost t-mini", onclick: () => { rz.sets[iSet].ev.splice(a.k, 1); o.toast("Substituição desfeita (corrigida antes do jogo)."); o.salvar(); } }, "Corrigida antes do saque")))));
+  if (iSet === 2 && est.trocouTb) {
+    const e8 = (rz.sets[2].ev || []).filter(x => x === "a" || x === "b"), pa = e8.filter(x => x === "a").length, pb = e8.length - pa;
+    if (Math.max(pa, pb) === 8 && Math.min(pa, pb) < 8 && (pa + pb) <= 15) box.append(h("div", { class: "rz-alerta info", role: "status" }, h("b", { text: "↔ Troca de lado" }), h("span", { text: "Tiebreak: uma equipe chegou aos 8 pontos. As equipes trocam de lado da piscina; a marcação de pontos já acompanhou." })));
+  }
   // quem deve sacar agora
   const sac = est.pos[est.saque][0];
   box.append(h("div", { class: "rz-confere" }, h("span", { class: "rz-bola", "aria-hidden": "true" }),
     h("span", null, "Próximo saque: ", h("b", { text: nm(sac) }), " (" + nomes[est.saque] + "). Se outro atleta sacar, use \"Falta de rotação\".")));
   box.append(
-    h("div", { class: "rz-pts" }, ["a", "b"].map(l => { const c = CORES[corDe(rz, l)];
+    h("div", { class: "rz-pts" }, (est.ladoA === "dir" ? ["b", "a"] : ["a", "b"]).map((l, k) => { const c = CORES[corDe(rz, l)];
       return h("button", { type: "button", class: "rz-ponto", style: "--c:" + c.cap + ";--e:" + c.escuro, onclick: () => o.ponto(l, 1) },
-        h("small", { text: est.saque === l ? "sacando" : "recebendo" }), "Ponto " + nomes[l]); })),
+        h("small", { text: (k === 0 ? "◀ esquerda · " : "direita ▶ · ") + (est.saque === l ? "sacando" : "recebendo") }), "Ponto " + nomes[l]); })),
     h("div", { class: "t-linha" },
       h("button", { type: "button", class: "ghost t-mini", disabled: !ultimo, onclick: () => {
         if (ultimo === "a" || ultimo === "b") o.ponto(ultimo, -1); else { ev.pop(); o.salvar(); }

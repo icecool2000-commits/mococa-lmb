@@ -881,6 +881,7 @@ export function montarTorneio(ctx) {
       if (d < 0 && (s[lado] || 0) + d < 0) { toast("O placar do set já está zerado para essa equipe."); return false; }
       s[lado] = (s[lado] || 0) + d;
       if (ROD) R.registrarPonto(j, i, lado, d);
+      if (i === 2 && d > 0 && s[lado] === 8 && s[lado === "a" ? "b" : "a"] < 8) toast("Tiebreak: 8 pontos! As equipes trocam de lado.");
       if (setFechado(s, i)) {
         const r = C.resultadoBiribol(j);
         if (r.fim) { j.status = "encerrado"; j.venc = r.venc; toast("Fim de jogo: vitória de " + eqNome(r.venc) + "!"); }
@@ -905,7 +906,9 @@ export function montarTorneio(ctx) {
       h("small", { text: i < 2 ? "Set " + (i + 1) + " · 21" : "Tiebreak · 15" }), h("b", { text: s.a + " - " + s.b })))));
     if (ed && !fim) {
       const s = j.sets[ia];
-      painel.append(h("div", { class: "t-pontos" }, ["a", "b"].map(l => h("div", { class: "t-pcol" },
+      // a marcação acompanha o lado da piscina de cada equipe (rodízio)
+      const ordem = ROD ? R.ordemLados(j.rodizio, ia) : ["a", "b"];
+      painel.append(h("div", { class: "t-pontos" }, ordem.map(l => h("div", { class: "t-pcol" },
         h("span", { class: "cap", text: eqNome(j[l]) }),
         h("b", { class: "t-pnum", text: s[l] }),
         h("div", { class: "t-linha" }, h("button", { type: "button", class: "t-pbtn", onclick: () => pontoEquipe(l, 1) }, "+1"), h("button", { type: "button", class: "ghost t-pbtn", onclick: () => pontoEquipe(l, -1) }, "−1"))))));
