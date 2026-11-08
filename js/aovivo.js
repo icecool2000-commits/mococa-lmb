@@ -346,11 +346,13 @@ export function montarAoVivo(ctx) {
       campo,
       h("div", { class: "t-linha" },
         h("button", { type: "button", onclick: () => { navigator.clipboard && navigator.clipboard.writeText(url).then(() => toast("Link copiado."), () => { campo.select(); toast("Copie o link selecionado."); }); } }, "Copiar link"),
-        h("a", { class: "av-btn ghost", href: url, target: "_blank", rel: "noopener" }, "Abrir o placar")),
+        h("a", { class: "av-btn ghost", href: url, target: "_blank", rel: "noopener" }, "Abrir o placar"),
+        esporte === "biribol" && !MANUAL && h("button", { type: "button", class: "ghost", onclick: () => { const u = url + "&so=rodizio"; navigator.clipboard && navigator.clipboard.writeText(u).then(() => toast("Link do rodízio copiado."), () => toast(u)); } }, "Copiar link do rodízio")),
       h("ul", { class: "cap av-dicas" },
         h("li", { text: "OBS / Streamlabs Desktop: Fontes › + › Navegador (Browser). Cole o link, largura 1280 e altura 200, e posicione no topo do vídeo." }),
         h("li", { text: "Prism Live (celular): Widget › Web (ou Navegador) e cole o link." }),
         h("li", { text: "Para placar embaixo, use o link com &pos=baixo; para só os números, &compacto=1." }),
+        esporte === "biribol" && h("li", null, "Rodízio na live: placar + piscina juntos com ", h("code", { text: "&rodizio=1" }), "; só a piscina, num widget separado, com ", h("code", { text: "&so=rodizio" }), " (tamanho com &largura=600). Aparece quando o mesário cadastrou a formação na súmula do jogo em destaque."),
         h("li", { text: "O placar mostra o jogo em destaque escolhido em \"Transmissão no ar\". Troque o jogo aqui e ele muda na live." }),
         h("li", { text: "Sem transmissão começada aqui no app, ou sem jogo escolhido, aparece só a faixa com a logo e o título. Os números entram quando você toca em Começar transmissão com um jogo escolhido." })));
   }

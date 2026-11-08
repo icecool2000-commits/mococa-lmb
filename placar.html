@@ -33,6 +33,15 @@ body.basquete .sets{display:none}
 #faixa b{font-weight:800;font-size:20px;text-transform:uppercase;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:620px}
 #faixa small{font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--destaque)}
 body.compacto #faixa .logo{display:none}
+body{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+body.baixo{justify-content:flex-end}
+#rz{display:none;width:var(--rzw,520px);max-width:calc(100vw - 32px);border-radius:14px;overflow:hidden;line-height:0;filter:drop-shadow(0 6px 14px rgba(0,0,0,.45))}
+#rz.on{display:block}
+#rz svg{width:100%;height:auto;display:block}
+.rz-jog{transition:transform .9s cubic-bezier(.45,.05,.3,1),opacity .6s}
+.rz-anel{animation:rzpulsa 1.4s ease-in-out infinite}
+@keyframes rzpulsa{50%{stroke-opacity:.35}}
+body.so-rz #bug,body.so-rz #faixa{display:none!important}
 </style>
 </head>
 <body>
@@ -40,6 +49,7 @@ body.compacto #faixa .logo{display:none}
   <div class="lin" id="la"><span class="nome" id="na"></span><span class="sets" id="sa"></span><span class="pts" id="pa"></span></div>
   <div class="lin" id="lb"><span class="nome" id="nb"></span><span class="sets" id="sb"></span><span class="pts" id="pb"></span></div>
 </div></div><div class="tag" id="tag"></div></div>
+<div id="rz"></div>
 <div id="faixa"><div class="logo"><img id="logo2" alt=""></div><div class="txt"><small id="f1"></small><b id="f2"></b></div></div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -47,9 +57,14 @@ import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasej
 import { firebaseConfig } from "./config.js";
 let core; try { core = await import("./torneio-core.js"); } catch (e) { core = await import("./js/torneio-core.js"); }
 let av; try { av = await import("./aovivo.js"); } catch (e) { av = await import("./js/aovivo.js"); }
+let R; try { R = await import("./rodizio.js"); } catch (e) { R = await import("./js/rodizio.js"); }
 const q = new URLSearchParams(location.search), APP = q.get("app") || "biribol";
 if (q.get("pos") === "baixo") document.body.classList.add("baixo");
 if (q.get("compacto") === "1") document.body.classList.add("compacto");
+// rodízio: &rodizio=1 mostra a piscina junto do placar; &so=rodizio mostra só a piscina (para um widget separado)
+const SO_RZ = q.get("so") === "rodizio", COM_RZ = SO_RZ || q.get("rodizio") === "1";
+if (SO_RZ) document.body.classList.add("so-rz");
+if (q.get("largura")) document.documentElement.style.setProperty("--rzw", parseInt(q.get("largura"), 10) + "px");
 const db = getFirestore(initializeApp(firebaseConfig));
 const $ = id => document.getElementById(id);
 let E = null, J = null, chave = "", unsub = null;
@@ -61,7 +76,17 @@ const MARCA = {
   "biribol-treino": { titulo: "Biribol Oficial Mococa", logo: "logo.jpg", escura: "#1f1f23", cor: "#d81f2a", destaque: "#e2626b" },
   basquete: { titulo: "Família Basquete Mococa", logo: "logo.jpg", escura: "#0c0c0d", cor: "#3f9a3c", destaque: "#ec6a2c" }
 };
+function pintarRodizio() {
+  const box = $("rz");
+  const rz = COM_RZ && E && E.aoVivo && J && !E.manual && J.rodizio;
+  const i = rz ? R.setComFormacao(rz, Math.max(0, (J.sets || []).length - 1)) : -1;
+  if (i < 0) { box.classList.remove("on"); box.textContent = ""; return; }
+  box.textContent = "";
+  box.append(R.piscina({ rz, est: R.estado(rz, i), nomes: { a: E.nomeA || "Equipe A", b: E.nomeB || "Equipe B" }, chave: "ov:" + J.id + ":" + i }));
+  box.classList.add("on");
+}
 function pintar() {
+  pintarRodizio();
   const bug = $("bug"), faixa = $("faixa");
   if (E && E.manual) J = av.jogoManual(E.manual);
   const m = { ...(MARCA[APP] || {}), ...((E && E.marca) || {}) }, r = document.documentElement.style;
