@@ -385,6 +385,15 @@ export function montarAoVivo(ctx) {
           try { await setDoc(refEstado, { aoVivo: false, sim: null, simAuto: null, fim: Date.now() }, { merge: true }); rasc = null; painelSujo = true; toast("Simulação encerrada."); }
           catch (e) { console.error(e); toast("Não deu para encerrar."); }
         } }, "Encerrar simulação")),
+      h("label", { class: "t-lbl" }, "Link da live no YouTube (opcional, para testar com live não listada)",
+        h("div", { class: "t-linha av-linkrow" },
+          h("input", { id: "av-simlink", value: E.videoId ? "https://youtu.be/" + E.videoId : "", placeholder: "Vazio = live pública atual do canal" }),
+          h("button", { type: "button", class: "ghost", onclick: async () => {
+            const txt = document.getElementById("av-simlink").value, vid = lerVideo(txt);
+            if (txt.trim() && !vid) { toast("Não reconheci esse link do YouTube."); return; }
+            try { await setDoc(refEstado, { videoId: vid || null }, { merge: true }); toast(vid ? "Vídeo da live atualizado." : "Usando a live atual do canal."); }
+            catch (e) { console.error(e); toast("Não deu para salvar o link."); }
+          } }, "Usar link"))),
       h("p", { class: "cap", text: auto ? "Automático ligado: os pontos continuam saindo na live mesmo com o app fechado ou em segundo plano." : "Ponto de quem saca: não roda. Ponto de quem recebe: roda e passa a sacar. Deixe o Prism aberto com o link do placar para ver tudo mudando na live." }));
   }
 

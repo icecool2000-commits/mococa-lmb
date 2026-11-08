@@ -297,3 +297,5 @@ button.mini{padding:4px 10px;font-size:12px}
 .rz-vivo{margin:0;padding:0;border:0;background:none}
 .rz-ponto{white-space:normal;font-size:15px;line-height:1.2;text-align:center}
 .rz-num input{width:60px;padding:6px 2px;font-size:16px}
+.av-linkrow{flex-wrap:nowrap}
+.av-linkrow input{flex:1;min-width:0}
