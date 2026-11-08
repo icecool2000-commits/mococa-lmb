@@ -758,7 +758,12 @@ function dadosSumula(T, j, esporte) {
   const placar = BIR ? r.sa + " x " + r.sb : r.pa + " x " + r.pb;
   const resultado = r.empate ? "Empate" : r.venc ? "Vitória de " + eq(r.venc).nome + (BIR ? " por " + Math.max(r.sa, r.sb) + " sets a " + Math.min(r.sa, r.sb) : "") : "Sem resultado";
   const destaque = [...lados[0].linhas.map(x => ({ ...x, eq: lados[0].nome })), ...lados[1].linhas.map(x => ({ ...x, eq: lados[1].nome }))].sort((x, y) => y.p - x.p)[0];
-  return { BIR, et, lados, parciais, placar, resultado, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };
+  // sanções que vão para a súmula (advertência verbal não vai: regra 46.1)
+  const ROT = { amarelo: "Cartão amarelo", vermelho: "Cartão vermelho (expulsão)", advDemora: "Advertência por demora", penDemora: "Penalização por demora" };
+  const quem = x => x.quem === "tec" ? "Técnico" : x.quem === "com" ? "Comissão técnica" : x.quem === "eq" ? "Equipe" : (() => { const a = (eq(j[x.l]).atletas || []).find(y => y.id === x.quem) || {}; const n = j.rodizio && j.rodizio.atl && j.rodizio.atl[x.quem] && j.rodizio.atl[x.quem].num != null ? j.rodizio.atl[x.quem].num : a.num; return "nº " + (n ?? "–") + " " + (a.nome || ""); })();
+  const sancoes = (j.sancoes || []).filter(x => ROT[x.tipo]).map(x => [ROT[x.tipo], eq(j[x.l]).nome, quem(x), x.set < 2 ? (x.set + 1) + "º set" : "Tiebreak", x.placar || ""]);
+  const incompleta = j.incompleta ? eq(j[j.incompleta]).nome + " declarada incompleta (regra 23.3)" : "";
+  return { BIR, et, lados, parciais, placar, sancoes, incompleta, resultado, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };
 }
 const nomeSumula = (T, j, D, ext) => arquivo(T, "sumula-" + (D.lados[0].nome + "-x-" + D.lados[1].nome).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase() + "." + ext);
 
@@ -789,6 +794,10 @@ export async function sumulaPDF(T, j, esporte, marca) {
       styles: { halign: "center", fontSize: 8.5, cellPadding: 1.1 }, columnStyles: { 0: { cellWidth: 14 }, 1: { halign: "left" } },
       didParseCell: d => { if (d.section === "body" && d.row.index === body.length) { d.cell.styles.fontStyle = "bold"; d.cell.styles.fillColor = "#e6f2fb"; } } }, logo);
   });
+  if (D.sancoes.length || D.incompleta) {
+    y = secao(doc, y, "Sanções", logo);
+    y = tabela(doc, y, { head: [["Sanção", "Equipe", "Quem", "Set", "Placar"]], body: [...D.sancoes, ...(D.incompleta ? [[D.incompleta, "", "", "", ""]] : [])], styles: { fontSize: 8.5, cellPadding: 1.1 } }, logo);
+  }
   if (D.destaque) { doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.text((D.BIR ? "Maior pontuador: " : "Cestinha: ") + D.destaque.nome + " (" + D.destaque.eq + ") – " + D.destaque.p + " pontos", 10, y); doc.setFont("helvetica", "normal"); y += 8; }
   // assinaturas
   if (y > doc.internal.pageSize.getHeight() - 36) { doc.addPage(); y = cabecalho(doc, logo, "Súmula da partida", D.info); }
@@ -812,6 +821,7 @@ export async function sumulaXLSX(T, j, esporte, marca) {
     tituloSecao(ws, "Atletas – " + l.nome, E);
     tabelaXL(ws, ["Nº", "Atleta", "Pontos", lbl, "Assist."], [...l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as]), ["", "Total", l.tot.p, l.tot.b, l.tot.as]], E, { esq: [1], negrito: [2], destaque: i => i === l.linhas.length });
   });
+  if (D.sancoes.length || D.incompleta) { tituloSecao(ws, "Sanções", E); tabelaXL(ws, ["Sanção", "Equipe", "Quem", "Set", "Placar"], [...D.sancoes, ...(D.incompleta ? [[D.incompleta, "", "", "", ""]] : [])], E, { esq: [0, 1, 2] }); }
   if (D.destaque) { tituloSecao(ws, (D.BIR ? "Maior pontuador: " : "Cestinha: ") + D.destaque.nome + " (" + D.destaque.eq + ") – " + D.destaque.p + " pontos", E); ws.__linha++; }
   tituloSecao(ws, "Assinaturas", E);
   ["Árbitro", "Mesário / anotador", "Capitão – " + D.lados[0].nome, "Capitão – " + D.lados[1].nome].forEach(t => {

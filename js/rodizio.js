@@ -22,8 +22,11 @@ export function estado(rz, i) {
   if (!st || !st.pos || !st.pos.a || !st.pos.b) return null;
   const pos = { a: [...st.pos.a], b: [...st.pos.b] };
   let saque = st.saque || "a", ult = null, pontos = 0;
-  (st.ev || []).forEach(e => {
+  const pl = { a: 0, b: 0 }, rallies = [];
+  (st.ev || []).forEach((e, k) => {
     if (e === "a" || e === "b") {
+      rallies.push({ k, sac: saque, aid: pos[saque][0], antes: pl.a + "-" + pl.b, ganhou: e });
+      pl[e]++;
       pontos++;
       if (e !== saque) { pos[e] = girar(pos[e]); saque = e; ult = { tipo: "rodou", lado: e }; }
       else ult = { tipo: "manteve", lado: e };
@@ -33,7 +36,7 @@ export function estado(rz, i) {
     }
   });
   const reservas = l => ((rz.elenco && rz.elenco[l]) || []).filter(id => !pos[l].includes(id));
-  return { pos, saque, ladoA: st.ladoA || "esq", ult, pontos, reservas: { a: reservas("a"), b: reservas("b") } };
+  return { pos, saque, ladoA: st.ladoA || "esq", ult, pontos, rallies, reservas: { a: reservas("a"), b: reservas("b") } };
 }
 // último set (até o índice "ate") que tem formação
 export function setComFormacao(rz, ate) {
@@ -182,6 +185,7 @@ export function painel(o) {
   if (iMostra !== iSet) w.append(h("p", { class: "cap", text: "Mostrando como terminou o " + (iMostra < 2 ? "set " + (iMostra + 1) : "tiebreak") + ". Aguardando a formação do próximo set." }));
   w.append(h("div", { class: "rz-box" }, piscina({ rz, est, nomes, chave: j.id + ":" + iMostra })), legenda(h, rz, est, nomes));
   if (ed && !o.fim && iMostra === iSet) w.append(controles(o, rz, est, iSet));
+  else if (iMostra === iSet && !o.fim) alertas(j, iSet, est, nomes).forEach(a => w.append(h("div", { class: "rz-alerta " + a.nivel }, h("b", { text: "⚠ Regra " + a.regra }), h("span", { text: a.msg }))));
   return w;
 }
 
@@ -219,6 +223,8 @@ function formFormacao(o, iSet) {
     const cor = CORES[l === "a" ? r.toucaA : r.toucaA === "azul" ? "vermelha" : "azul"], ats = elencoOrdenado(o.atletas[l]);
     const card = h("div", { class: "rz-eq", style: "--c:" + cor.cap }, h("b", { class: "rz-eqnome", text: nomes[l] + " · touca " + cor.nome.toLowerCase() }));
     if (ats.length < 4) { card.append(h("p", { class: "cap", text: "Cadastre pelo menos 4 atletas desta equipe na aba Equipes." })); f.append(card); return; }
+    if (ats.length > 8) card.append(h("div", { class: "rz-alerta erro" }, h("b", { text: "⚠ Regra 12.1" }), h("span", { text: "A equipe pode ter no máximo 8 atletas na súmula; esta tem " + ats.length + "." })));
+    const exJ = expulsos(o.j); r.pos[l].forEach(id => { if (exJ.has(id)) card.append(h("div", { class: "rz-alerta erro" }, h("b", { text: "⚠ Regra 46.3" }), h("span", { text: "Há atleta expulso na formação: troque por outro." }))); });
     card.append(h("span", { class: "cap", text: "Número da touca de cada atleta neste jogo:" }));
     card.append(h("div", { class: "rz-nums" }, ats.map(a => h("label", { class: "rz-num" },
       h("input", { type: "number", min: 0, max: 99, inputmode: "numeric", value: r.num[a.id], id: "rzn-" + a.id, "aria-label": "Número da touca de " + a.nome, onchange: e => { r.num[a.id] = e.target.value; o.render(); } }),
@@ -243,6 +249,8 @@ function confirmar(o, iSet, rzPrev) {
     const ns = r.pos[l].map(id => rzPrev.atl[id].num).filter(n => n != null && !Number.isNaN(n));
     if (new Set(ns).size !== ns.length) { o.toast("Há números de touca repetidos em " + (l === "a" ? o.nomeA : o.nomeB) + "."); return; }
   }
+  const exJ = expulsos(j);
+  if (["a", "b"].some(l => r.pos[l].some(id => exJ.has(id)))) { o.toast("Atleta expulso não pode estar na formação (regra 46.3)."); return; }
   const sets = [...(rz.sets || [])]; while (sets.length < iSet) sets.push(null);
   const ev = sets[iSet] && sets[iSet].ev ? sets[iSet].ev : [];
   sets[iSet] = { ladoA: r.ladoA, saque: r.saque, pos: { a: [...r.pos.a], b: [...r.pos.b] }, ev };
@@ -250,10 +258,110 @@ function confirmar(o, iSet, rzPrev) {
   rasc = null; o.toast("Formação confirmada."); o.salvar();
 }
 
+
+/* ---------------- regras oficiais (CNBi): substituição, rodízio e disciplina ---------------- */
+// Substituição (30): sem limite; quem já esteve na piscina no set só reentra na posição de saque;
+//   o suplente entra a 1ª vez em qualquer posição. Excepcional por lesão (31): qualquer um entra e o lesionado não volta.
+//   Expulso (32) deve ser substituído regularmente; sem como, a equipe fica INCOMPLETA (23.3).
+//   Substituição irregular (32.1/32.2): perde o rally, corrige a substituição e anula os pontos da equipe feitos depois dela.
+// Rodízio (29): falta de rotação = perde o rally; pontos da equipe a partir do momento da falta são anulados
+//   (se o momento não puder ser determinado, só perde o rally).
+// Disciplina (46–49): 1ª conduta = advertência verbal (sem ponto, não vai à súmula); 2ª conduta de qualquer integrante = amarelo
+//   (perde o rally); quem já tem amarelo, na próxima = vermelho (expulsão até o fim da partida). Vermelho direto por ofensa/agressão.
+//   Demora (41.2): 1ª = advertência por demora; a partir da 2ª = penalização por demora (perde o rally).
+export const SANCOES = {
+  adv: { rot: "Advertência verbal", curto: "Advertência", ponto: false, sumula: false, ic: "🗣️" },
+  amarelo: { rot: "Cartão amarelo", curto: "Amarelo", ponto: true, sumula: true, ic: "🟨" },
+  vermelho: { rot: "Cartão vermelho (expulsão)", curto: "Vermelho", ponto: false, sumula: true, ic: "🟥" },
+  advDemora: { rot: "Advertência por demora", curto: "Adv. demora", ponto: false, sumula: true, ic: "⏱️" },
+  penDemora: { rot: "Penalização por demora", curto: "Pen. demora", ponto: true, sumula: true, ic: "⏱️" }
+};
+export const MEMBROS_EXTRA = { tec: "Técnico", com: "Comissão técnica", eq: "Equipe" };
+export const expulsos = j => new Set((j.sancoes || []).filter(x => x.tipo === "vermelho" && x.quem && !MEMBROS_EXTRA[x.quem]).map(x => x.quem));
+export function lesionados(rz) {
+  const r = new Set(); ((rz && rz.sets) || []).forEach(st => ((st && st.ev) || []).forEach(e => { if (e && e.t === "s" && e.ex) r.add(e.sai); })); return r;
+}
+export function jaJogouNoSet(rz, i, l) {
+  const st = rz.sets[i], r = new Set(st.pos[l]);
+  (st.ev || []).forEach(e => { if (e && e.t === "s" && e.l === l) r.add(e.entra); }); return r;
+}
+// devolve { ok, msg, regra }
+export function validarSub(j, iSet, est, l, sai, entra, excepcional) {
+  const rz = j.rodizio, at = id => (rz.atl && rz.atl[id]) || {}, nm = id => "nº " + (at(id).num ?? "–") + " " + (at(id).nome || "");
+  if (!sai || est.pos[l].indexOf(sai) < 0) return { ok: false, msg: "Escolha quem sai da piscina." };
+  if (!entra) return { ok: false, msg: "Escolha quem entra." };
+  if (est.pos[l].includes(entra)) return { ok: false, msg: nm(entra) + " já está na piscina." };
+  if (expulsos(j).has(entra)) return { ok: false, regra: "46.3", msg: nm(entra) + " foi expulso (vermelho) e não pode voltar a jogar nesta partida." };
+  if (lesionados(rz).has(entra)) return { ok: false, regra: "31.2", msg: nm(entra) + " saiu por lesão (substituição excepcional) e não pode reentrar." };
+  if (excepcional) return { ok: true, regra: "31", msg: "Substituição excepcional por lesão: " + nm(sai) + " não poderá reentrar na partida." };
+  const k = est.pos[l].indexOf(sai);
+  if (jaJogouNoSet(rz, iSet, l).has(entra) && k !== 0)
+    return { ok: false, regra: "30.2–30.4", msg: nm(entra) + " já esteve na piscina neste set e só pode reentrar na posição de saque. Agora quem está no saque é " + nm(est.pos[l][0]) + "." };
+  return { ok: true, msg: jaJogouNoSet(rz, iSet, l).has(entra) ? "Reentrada na posição de saque: permitida." : "Primeira entrada no set: pode ser em qualquer posição." };
+}
+// alguém de fora pode entrar no lugar de "sai" de forma regular?
+export function temSubRegular(j, iSet, est, l, sai) {
+  return (j.rodizio.elenco[l] || []).some(id => !est.pos[l].includes(id) && validarSub(j, iSet, est, l, sai, id, false).ok);
+}
+// alertas para mesário e árbitro
+export function alertas(j, iSet, est, nomes) {
+  const rz = j.rodizio, out = [], at = id => (rz.atl && rz.atl[id]) || {}, nm = id => "nº " + (at(id).num ?? "–") + " " + (at(id).nome || ""), ex = expulsos(j);
+  ["a", "b"].forEach(l => {
+    est.pos[l].forEach(id => {
+      if (!ex.has(id)) return;
+      const pode = temSubRegular(j, iSet, est, l, id);
+      out.push({ nivel: "erro", l, tipo: "expulsoEmJogo", aid: id, regra: pode ? "32" : "32 / 23.3",
+        msg: nm(id) + " (" + nomes[l] + ") foi expulso e está na piscina. " + (pode ? "Faça a substituição regular antes do próximo saque." : "Não há substituição regular possível: a equipe fica INCOMPLETA.") });
+    });
+    const st = rz.sets[iSet];
+    (st.ev || []).forEach((e, k) => { if (e && e.t === "s" && e.irr && e.l === l) out.push({ nivel: "erro", l, tipo: "subIrregular", k, regra: "32.1 / 32.2",
+      msg: "Substituição irregular em " + nomes[l] + " (sai " + nm(e.sai) + ", entra " + nm(e.entra) + "): " + (e.motivo || "fora da regra") + "." }); });
+    const disp = (rz.elenco[l] || []).filter(id => !ex.has(id) && !lesionados(rz).has(id));
+    if (disp.length < 4) out.push({ nivel: "erro", l, tipo: "incompleta", regra: "23.3", msg: nomes[l] + " tem só " + disp.length + " atleta(s) em condição de jogo: equipe INCOMPLETA." });
+  });
+  return out;
+}
+// anula os pontos da equipe l a partir do lance k (ev) no set i e devolve quantos foram anulados
+function anularDesde(j, i, l, k) {
+  const st = j.rodizio.sets[i]; let n = 0;
+  st.ev = st.ev.filter((e, idx) => { if (idx >= k && e === l) { n++; return false; } return true; });
+  j.sets[i][l] = Math.max(0, (j.sets[i][l] || 0) - n);
+  return n;
+}
+// equipe incompleta: adversária recebe os pontos e sets que faltam (23.3)
+export function declararIncompleta(j, l) {
+  const op = outro(l), sets = j.sets; let ga = 0, gb = 0;
+  const alvo = i => (i < 2 ? 21 : 15), venc = s => s.a > s.b ? "a" : "b";
+  sets.forEach((s, i) => { if (i < sets.length - 1) venc(s) === "a" ? ga++ : gb++; });
+  const ult = sets[sets.length - 1], i = sets.length - 1;
+  ult[op] = Math.max(alvo(i), (ult[l] || 0) + 2); (op === "a" ? ga++ : gb++);
+  while ((op === "a" ? ga : gb) < 2) { const s = { a: 0, b: 0 }; s[op] = alvo(sets.length); sets.push(s); op === "a" ? ga++ : gb++; }
+  j.incompleta = l; j.status = "encerrado"; j.venc = j[op];
+}
+
+let discForm = null, faltaForm = null;
 function controles(o, rz, est, iSet) {
-  const { h, j } = o, nomes = { a: o.nomeA, b: o.nomeB }, at = id => (rz.atl && rz.atl[id]) || {};
+  const { h, j } = o, nomes = { a: o.nomeA, b: o.nomeB }, at = id => (rz.atl && rz.atl[id]) || {}, nm = id => "nº " + (at(id).num ?? "–") + " " + (at(id).nome || "");
   const ev = (rz.sets[iSet].ev || []), ultimo = ev[ev.length - 1];
-  const box = h("div", { class: "rz-ctl" },
+  const box = h("div", { class: "rz-ctl" });
+  // alertas de regra
+  const al = alertas(j, iSet, est, nomes);
+  al.forEach(a => box.append(h("div", { class: "rz-alerta " + a.nivel, role: "alert" },
+    h("b", { text: "⚠ Regra " + a.regra }), h("span", { text: a.msg }),
+    a.tipo === "expulsoEmJogo" && temSubRegular(j, iSet, est, a.l, a.aid) && h("button", { type: "button", class: "t-mini", onclick: () => { subForm = { l: a.l, sai: a.aid, entra: "", ex: false }; o.render(); } }, "Substituir agora"),
+    (a.tipo === "incompleta" || (a.tipo === "expulsoEmJogo" && !temSubRegular(j, iSet, est, a.l, a.aid))) && h("button", { type: "button", class: "danger t-mini", onclick: ev2 => armar(ev2, "Confirmar: equipe incompleta", () => { declararIncompleta(j, a.l); o.toast(nomes[a.l] + " declarada incompleta. Jogo encerrado."); o.salvar(); }) }, "Declarar equipe incompleta (23.3)"),
+    a.tipo === "subIrregular" && h("div", { class: "t-linha" },
+      h("button", { type: "button", class: "danger t-mini", onclick: () => {
+        const n = anularDesde(j, iSet, a.l, a.k); rz.sets[iSet].ev.splice(a.k, 1);
+        o.toast("Regra 32.2: substituição corrigida, " + n + " ponto(s) de " + nomes[a.l] + " anulado(s) e ponto para " + nomes[outro(a.l)] + ".");
+        o.ponto(outro(a.l), 1);
+      } }, "Aplicar 32.2 (perde o rally)"),
+      h("button", { type: "button", class: "ghost t-mini", onclick: () => { rz.sets[iSet].ev.splice(a.k, 1); o.toast("Substituição desfeita (corrigida antes do jogo)."); o.salvar(); } }, "Corrigida antes do saque")))));
+  // quem deve sacar agora
+  const sac = est.pos[est.saque][0];
+  box.append(h("div", { class: "rz-confere" }, h("span", { class: "rz-bola", "aria-hidden": "true" }),
+    h("span", null, "Próximo saque: ", h("b", { text: nm(sac) }), " (" + nomes[est.saque] + "). Se outro atleta sacar, use \"Falta de rotação\".")));
+  box.append(
     h("div", { class: "rz-pts" }, ["a", "b"].map(l => { const c = CORES[corDe(rz, l)];
       return h("button", { type: "button", class: "rz-ponto", style: "--c:" + c.cap + ";--e:" + c.escuro, onclick: () => o.ponto(l, 1) },
         h("small", { text: est.saque === l ? "sacando" : "recebendo" }), "Ponto " + nomes[l]); })),
@@ -261,22 +369,113 @@ function controles(o, rz, est, iSet) {
       h("button", { type: "button", class: "ghost t-mini", disabled: !ultimo, onclick: () => {
         if (ultimo === "a" || ultimo === "b") o.ponto(ultimo, -1); else { ev.pop(); o.salvar(); }
       } }, "Desfazer último lance"),
-      h("button", { type: "button", class: "ghost t-mini", onclick: () => { subForm = subForm ? null : { l: "a", sai: "", entra: "" }; o.render(); } }, subForm ? "Fechar substituição" : "Substituição")),
+      h("button", { type: "button", class: "ghost t-mini", onclick: () => { subForm = subForm ? null : { l: "a", sai: "", entra: "", ex: false }; faltaForm = null; o.render(); } }, subForm ? "Fechar substituição" : "Substituição"),
+      h("button", { type: "button", class: "ghost t-mini", onclick: () => { faltaForm = faltaForm ? null : { l: "a", k: "" }; subForm = null; o.render(); } }, faltaForm ? "Fechar falta" : "Falta de rotação / posição")),
     h("p", { class: "cap", text: "Ponto de quem saca: não roda. Ponto de quem recebe: essa equipe roda e passa a sacar. Os +1 da súmula também contam." }));
-  if (subForm) {
-    const sf = subForm;
-    if (!est.pos[sf.l].includes(sf.sai)) sf.sai = est.pos[sf.l][0];
-    if (!est.reservas[sf.l].includes(sf.entra)) sf.entra = est.reservas[sf.l][0] || "";
-    const lbl = id => (at(id).num ?? "–") + " · " + (at(id).nome || "") + (est.pos[sf.l].indexOf(id) >= 0 ? " (" + POS_NOMES[est.pos[sf.l].indexOf(id)] + ")" : "");
-    box.append(h("div", { class: "rz-sub" },
-      h("div", { class: "chips" }, ["a", "b"].map(l => h("button", { type: "button", "aria-pressed": String(sf.l === l), onclick: () => { sf.l = l; sf.sai = ""; sf.entra = ""; o.render(); } }, nomes[l]))),
-      h("label", { class: "t-lbl" }, "Sai da piscina", h("select", { onchange: e => sf.sai = e.target.value }, est.pos[sf.l].map(id => h("option", { value: id, selected: sf.sai === id }, lbl(id))))),
-      est.reservas[sf.l].length ? h("label", { class: "t-lbl" }, "Entra (reserva)", h("select", { onchange: e => sf.entra = e.target.value }, est.reservas[sf.l].map(id => h("option", { value: id, selected: sf.entra === id }, lbl(id)))))
-        : h("p", { class: "cap", text: "Essa equipe não tem reservas cadastrados." }),
-      est.reservas[sf.l].length > 0 && h("button", { type: "button", onclick: () => {
-        rz.sets[iSet].ev = [...ev, { t: "s", l: sf.l, sai: sf.sai, entra: sf.entra }];
-        o.toast("Substituição: entra " + (at(sf.entra).nome || "") + "."); subForm = null; o.salvar();
-      } }, "Confirmar substituição")));
-  }
+  if (subForm) box.append(formSub(o, rz, est, iSet, nomes, nm));
+  if (faltaForm) box.append(formFalta(o, rz, est, iSet, nomes, nm));
   return box;
+}
+
+// botão que pede um segundo toque para confirmar
+function armar(ev, txt, fn) {
+  const b = ev.currentTarget; if (b.dataset.armado) return fn();
+  const antes = b.textContent; b.dataset.armado = "1"; b.textContent = txt; setTimeout(() => { delete b.dataset.armado; b.textContent = antes; }, 4000);
+}
+
+function formSub(o, rz, est, iSet, nomes, nm) {
+  const { h, j } = o, sf = subForm;
+  if (!est.pos[sf.l].includes(sf.sai)) sf.sai = est.pos[sf.l][0];
+  const fora = (rz.elenco[sf.l] || []).filter(id => !est.pos[sf.l].includes(id));
+  if (!fora.includes(sf.entra)) sf.entra = fora.find(id => validarSub(j, iSet, est, sf.l, sf.sai, id, sf.ex).ok) || fora[0] || "";
+  const v = validarSub(j, iSet, est, sf.l, sf.sai, sf.entra, sf.ex);
+  const posDe = id => est.pos[sf.l].indexOf(id) >= 0 ? " (" + POS_NOMES[est.pos[sf.l].indexOf(id)] + ")" : "";
+  const marca = id => { const r = validarSub(j, iSet, est, sf.l, sf.sai, id, sf.ex); return r.ok ? "" : expulsos(j).has(id) ? " – expulso" : lesionados(rz).has(id) ? " – lesionado" : " – só no saque"; };
+  return h("div", { class: "rz-sub" },
+    h("div", { class: "chips" }, ["a", "b"].map(l => h("button", { type: "button", "aria-pressed": String(sf.l === l), onclick: () => { sf.l = l; sf.sai = ""; sf.entra = ""; o.render(); } }, nomes[l]))),
+    h("label", { class: "t-lbl" }, "Sai da piscina", h("select", { onchange: e => { sf.sai = e.target.value; o.render(); } }, est.pos[sf.l].map(id => h("option", { value: id, selected: sf.sai === id }, nm(id) + posDe(id) + (expulsos(j).has(id) ? " – EXPULSO" : ""))))),
+    fora.length ? h("label", { class: "t-lbl" }, "Entra", h("select", { onchange: e => { sf.entra = e.target.value; o.render(); } }, fora.map(id => h("option", { value: id, selected: sf.entra === id }, nm(id) + marca(id)))))
+      : h("p", { class: "cap", text: "Essa equipe não tem atletas fora da piscina." }),
+    h("label", { class: "t-chk" }, h("input", { type: "checkbox", checked: !!sf.ex, onchange: e => { sf.ex = e.target.checked; o.render(); } }), "Lesão: substituição excepcional (regra 31)"),
+    fora.length > 0 && h("div", { class: "rz-alerta " + (v.ok ? "ok" : "erro") }, h("b", { text: v.ok ? "✓ Permitida" : "✗ Irregular" + (v.regra ? " (regra " + v.regra + ")" : "") }), h("span", { text: v.msg })),
+    fora.length > 0 && h("div", { class: "t-linha" },
+      h("button", { type: "button", disabled: !v.ok, onclick: () => {
+        rz.sets[iSet].ev = [...(rz.sets[iSet].ev || []), sf.ex ? { t: "s", l: sf.l, sai: sf.sai, entra: sf.entra, ex: true } : { t: "s", l: sf.l, sai: sf.sai, entra: sf.entra }];
+        o.toast("Substituição: entra " + nm(sf.entra) + "."); subForm = null; o.salvar();
+      } }, "Confirmar substituição"),
+      !v.ok && v.regra && h("button", { type: "button", class: "ghost t-mini", onclick: ev => armar(ev, "Toque de novo: registrar irregular", () => {
+        rz.sets[iSet].ev = [...(rz.sets[iSet].ev || []), { t: "s", l: sf.l, sai: sf.sai, entra: sf.entra, irr: true, motivo: "regra " + v.regra }];
+        o.toast("Registrada como irregular. O árbitro decide pela regra 32.2."); subForm = null; o.salvar();
+      }) }, "Já aconteceu na piscina: registrar irregular")));
+}
+
+function formFalta(o, rz, est, iSet, nomes, nm) {
+  const { h, j } = o, ff = faltaForm;
+  const saques = est.rallies.filter(r => r.sac === ff.l);
+  return h("div", { class: "rz-sub" },
+    h("p", { class: "cap", text: "Falta de rotação (saque fora da ordem) ou de posição: a equipe perde o rally e a ordem é corrigida. Se o momento da falta for conhecido, os pontos da equipe a partir dele são anulados (regras 29.3, 29.4, 28.3)." }),
+    h("div", { class: "chips" }, ["a", "b"].map(l => h("button", { type: "button", "aria-pressed": String(ff.l === l), onclick: () => { ff.l = l; ff.k = ""; o.render(); } }, nomes[l]))),
+    h("label", { class: "t-lbl" }, "Momento da falta",
+      h("select", { onchange: e => ff.k = e.target.value },
+        h("option", { value: "", selected: ff.k === "" }, "Não dá para saber: só perde o rally"),
+        saques.map(r => h("option", { value: String(r.k), selected: String(r.k) === ff.k }, "Saque com placar " + r.antes + " (devia sacar " + nm(r.aid) + ")")))),
+    h("button", { type: "button", class: "danger", onclick: ev => armar(ev, "Toque de novo para aplicar", () => {
+      let n = 0; if (ff.k !== "") n = anularDesde(j, iSet, ff.l, Number(ff.k));
+      o.toast("Falta de " + nomes[ff.l] + ": " + (n ? n + " ponto(s) anulado(s) e " : "") + "ponto para " + nomes[outro(ff.l)] + ".");
+      faltaForm = null; o.ponto(outro(ff.l), 1);
+    }) }, "Aplicar falta (ponto para a outra equipe)"));
+}
+
+/* ---------------- disciplina: advertência, amarelo, vermelho, demora ---------------- */
+export function sugerirSancao(j, l, quem) {
+  const ss = (j.sancoes || []).filter(x => x.l === l && !/Demora$/.test(x.tipo));
+  if (quem !== "eq" && ss.some(x => x.quem === quem && x.tipo === "vermelho")) return { tipo: null, msg: "Já foi expulso nesta partida." };
+  if (quem !== "eq" && ss.some(x => x.quem === quem && x.tipo === "amarelo")) return { tipo: "vermelho", msg: "Já tem amarelo nesta partida: a próxima sanção é o vermelho (expulsão)." };
+  if (ss.length) return { tipo: "amarelo", msg: "A equipe já teve conduta advertida/sancionada nesta partida: a próxima conduta é cartão amarelo (perde o rally)." };
+  return { tipo: "adv", msg: "Primeira conduta da equipe: advertência verbal, sem perda de ponto e sem registro na súmula." };
+}
+export function sugerirDemora(j, l) { return (j.sancoes || []).some(x => x.l === l && /Demora$/.test(x.tipo)) ? "penDemora" : "advDemora"; }
+
+// seção da súmula com os cartões; o = { h, j, nomeA, nomeB, atletas, ed, fim, ponto, salvar, toast, render }
+export function painelDisciplina(o) {
+  const { h, j, ed } = o, nomes = { a: o.nomeA, b: o.nomeB }, rz = j.rodizio || {};
+  const numDe = (l, id) => { const a = (o.atletas[l] || []).find(x => x.id === id) || {}; const n = rz.atl && rz.atl[id] && rz.atl[id].num != null ? rz.atl[id].num : a.num; return (n ?? "–") + " " + (a.nome || (rz.atl && rz.atl[id] && rz.atl[id].nome) || ""); };
+  const quemTxt = x => MEMBROS_EXTRA[x.quem] || "nº " + numDe(x.l, x.quem);
+  const lista = j.sancoes || [];
+  const w = h("section", { class: "rz rz-disc" }, h("h3", { class: "rz-tit", text: "Disciplina" }));
+  if (lista.length) w.append(h("div", { class: "rz-sancs" }, lista.map((x, i) => h("div", { class: "rz-sanc " + x.tipo },
+    h("span", { class: "rz-sanc-ic", text: SANCOES[x.tipo].ic }),
+    h("span", null, h("b", { text: SANCOES[x.tipo].curto }), " · " + quemTxt(x) + " (" + nomes[x.l] + ") · " + (x.set < 2 ? "set " + (x.set + 1) : "tiebreak") + " · " + x.placar + (SANCOES[x.tipo].ponto ? " · ponto para " + nomes[outro(x.l)] : "")),
+    ed && !o.fim && h("button", { type: "button", class: "ghost t-mini", "aria-label": "Retirar sanção", onclick: ev => armar(ev, "Retirar?", () => { j.sancoes.splice(i, 1); o.toast("Sanção retirada." + (SANCOES[x.tipo].ponto ? " Se o ponto dado já não vale, corrija o placar com −1." : "")); o.salvar(); }) }, "×")))));
+  else w.append(h("p", { class: "cap", text: "Nenhuma sanção nesta partida." }));
+  if (!ed || o.fim) return w;
+  if (!discForm || discForm.jid !== j.id) discForm = { jid: j.id, aberto: false, l: "a", quem: "" };
+  const df = discForm;
+  w.append(h("button", { type: "button", class: "ghost t-mini", onclick: () => { df.aberto = !df.aberto; o.render(); } }, df.aberto ? "Fechar" : "Registrar sanção"));
+  if (!df.aberto) return w;
+  const ats = [...(o.atletas[df.l] || [])].sort((x, y) => (x.num ?? 999) - (y.num ?? 999));
+  if (!df.quem) df.quem = ats[0] ? ats[0].id : "tec";
+  const sug = sugerirSancao(j, df.l, df.quem), dem = sugerirDemora(j, df.l);
+  const iSet = Math.max(0, (j.sets || []).length - 1), s = (j.sets || [])[iSet] || { a: 0, b: 0 };
+  const aplicar = tipo => {
+    j.sancoes = [...lista, { tipo, l: df.l, quem: /Demora$/.test(tipo) ? "eq" : df.quem, set: iSet, placar: (s.a || 0) + "-" + (s.b || 0), em: Date.now() }];
+    const est = j.rodizio && setComFormacao(j.rodizio, iSet) === iSet ? estado(j.rodizio, iSet) : null;
+    o.toast(SANCOES[tipo].rot + (SANCOES[tipo].ponto ? ": ponto para " + nomes[outro(df.l)] + "." : ".") + (tipo === "vermelho" && est && est.pos[df.l].includes(df.quem) ? " Substitua o expulso." : ""));
+    df.aberto = false;
+    if (SANCOES[tipo].ponto) o.ponto(outro(df.l), 1); else o.salvar();
+  };
+  const bt = (tipo, extra) => h("button", { type: "button", class: "rz-sbtn " + tipo + (sug.tipo === tipo ? " sug" : ""), onclick: () => aplicar(tipo) }, SANCOES[tipo].ic + " " + SANCOES[tipo].rot + (extra || ""));
+  w.append(h("div", { class: "rz-sub" },
+    h("div", { class: "chips" }, ["a", "b"].map(l => h("button", { type: "button", "aria-pressed": String(df.l === l), onclick: () => { df.l = l; df.quem = ""; o.render(); } }, nomes[l]))),
+    h("label", { class: "t-lbl" }, "Quem",
+      h("select", { onchange: e => { df.quem = e.target.value; o.render(); } },
+        ats.map(a => h("option", { value: a.id, selected: df.quem === a.id }, "nº " + numDe(df.l, a.id) + (expulsos(j).has(a.id) ? " – expulso" : ""))),
+        ["tec", "com"].map(k => h("option", { value: k, selected: df.quem === k }, MEMBROS_EXTRA[k])))),
+    h("div", { class: "rz-alerta info" }, h("b", { text: "Sugestão pela regra" }), h("span", { text: sug.msg })),
+    sug.tipo !== null && h("div", { class: "rz-sbtns" },
+      bt("adv"), bt("amarelo", " – perde o rally"), bt("vermelho"),
+      h("p", { class: "cap", text: "Vermelho direto é permitido em conduta ofensiva ou agressão (regra 47.3). O amarelo não tira o atleta da piscina por tempo, e o expulso pode ser substituído normalmente." })),
+    h("span", { class: "t-sub", text: "Demora (sanção da equipe)" }),
+    h("div", { class: "rz-sbtns" }, h("button", { type: "button", class: "rz-sbtn " + dem + " sug", onclick: () => aplicar(dem) }, SANCOES[dem].ic + " " + SANCOES[dem].rot + (SANCOES[dem].ponto ? " – perde o rally" : "")))));
+  return w;
 }

@@ -299,3 +299,25 @@ button.mini{padding:4px 10px;font-size:12px}
 .rz-num input{width:60px;padding:6px 2px;font-size:16px}
 .av-linkrow{flex-wrap:nowrap}
 .av-linkrow input{flex:1;min-width:0}
+/* Regras e disciplina */
+.rz-alerta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:9px 11px;border-radius:10px;font-size:14px;line-height:1.35;border:1px solid}
+.rz-alerta span{flex:1 1 220px;min-width:0}
+.rz-alerta.erro{background:rgb(224 40 46 / .1);border-color:#e0282e;color:var(--fg)}
+.rz-alerta.erro b{color:#e0282e}
+.rz-alerta.ok{background:rgb(46 160 90 / .1);border-color:#2ea05a}
+.rz-alerta.ok b{color:#2ea05a}
+.rz-alerta.info{background:var(--soft);border-color:var(--line)}
+.rz-confere{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:var(--soft);font-size:14px}
+.rz-disc{gap:8px}
+.rz-sancs{display:flex;flex-direction:column;gap:6px}
+.rz-sanc{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--soft);font-size:13px}
+.rz-sanc > span:nth-child(2){flex:1;min-width:0}
+.rz-sanc.amarelo{border-left:5px solid #f2c21b}.rz-sanc.vermelho{border-left:5px solid #e0282e}.rz-sanc.adv{border-left:5px solid #8a94a3}
+.rz-sanc.advDemora,.rz-sanc.penDemora{border-left:5px solid #6b7cff}
+.rz-sanc-ic{font-size:16px}
+.rz-sbtns{display:flex;flex-direction:column;gap:6px}
+.rz-sbtns p{margin:0}
+.rz-sbtn{text-align:left;background:var(--surface);color:var(--fg);border:2px solid var(--line);border-radius:10px;padding:10px 12px;font-weight:600}
+.rz-sbtn.sug{border-color:var(--accent);box-shadow:0 0 0 3px rgb(0 0 0 / .04)}
+.rz-sbtn.amarelo.sug{border-color:#f2c21b;background:rgb(242 194 27 / .14)}
+.rz-sbtn.vermelho.sug{border-color:#e0282e;background:rgb(224 40 46 / .12)}

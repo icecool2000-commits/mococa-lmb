@@ -811,6 +811,10 @@ export function montarTorneio(ctx) {
     if (ROD && j.a && j.b && !j.wo) painel.append(R.painel({ h, j, nomeA: eqNome(j.a), nomeB: eqNome(j.b), ed, fim, toast, render,
       atletas: { a: ((eqDe(j.a) || {}).atletas || []), b: ((eqDe(j.b) || {}).atletas || []) },
       salvar: () => { if (j.status === "agendado") j.status = "andamento"; salvarSumula(true); }, ponto: (l, d) => pontoEquipe(l, d) }));
+    // disciplina (advertência, amarelo, vermelho, demora) pelas regras oficiais
+    if (ROD && j.a && j.b && !j.wo && (ed || (j.sancoes || []).length)) painel.append(R.painelDisciplina({ h, j, nomeA: eqNome(j.a), nomeB: eqNome(j.b), ed, fim, toast, render,
+      atletas: { a: ((eqDe(j.a) || {}).atletas || []), b: ((eqDe(j.b) || {}).atletas || []) },
+      salvar: () => { if (j.status === "agendado") j.status = "andamento"; salvarSumula(true); }, ponto: (l, d) => pontoEquipe(l, d) }));
     if (fim && !j.wo) painel.append(h("div", { class: "t-linha t-sum-exp" }, h("span", { class: "cap", text: "Gerar súmula:" }),
       h("button", { type: "button", class: "ghost t-mini", onclick: () => gerarSumula(j, "pdf") }, "PDF"), h("button", { type: "button", class: "ghost t-mini", onclick: () => gerarSumula(j, "xlsx") }, "Excel")));
     BIR ? sumulaBiribol(painel, j, ed, fim) : sumulaBasquete(painel, j, ed, fim);
