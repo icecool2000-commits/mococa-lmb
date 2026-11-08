@@ -257,3 +257,7 @@ button.mini{padding:4px 10px;font-size:12px}
 .av-ov input{width:100%;font-size:12px}
 .av-dicas{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
 @media (max-width:420px){.av-hi{grid-template-columns:110px 1fr}.av-thumb{width:110px}.av-num{font-size:34px}}
+.av-times{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.av-ctl-g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.av-ctl-g button{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.av-mais{font-size:18px;padding:16px 8px}

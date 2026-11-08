@@ -40,8 +40,23 @@ export function placarVivo(esporte, j) {
   return { grande: [r.pa, r.pb], atual: [p.a || 0, p.b || 0], rotAtual: r.fim ? "Final" : p.n, parciais: ps.filter(x => x.a || x.b).map(x => x.n + " " + (x.a || 0) + "-" + (x.b || 0)), fim: r.fim, venc: r.venc, wo: !!j.wo, rotGrande: "Pontos" };
 }
 
+function hLocal(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  if (props) for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else if (k === "style") e.style.cssText = v;
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  kids.flat(9).forEach(c => { if (c == null || c === false) return; e.append(c.nodeType ? c : document.createTextNode(String(c))); });
+  return e;
+}
+// placar marcado à mão (modo treino/rachão, sem súmula): vira um "jogo" para as mesmas contas
+export function jogoManual(m) { return m ? { id: "manual", a: "A", b: "B", sets: (m.sets || []).map(x => ({ a: x.a || 0, b: x.b || 0 })), periodos: m.periodos, status: "andamento" } : null; }
+
 export function montarAoVivo(ctx) {
-  const { db, h, toast, esporte, col } = ctx, { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } = ctx.fs;
+  const h = ctx.h || hLocal, MANUAL = !!ctx.placarManual;
+  const { db, toast, esporte, col } = ctx, { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } = ctx.fs;
   const APP = ctx.app, refEstado = doc(db, "ao_vivo", APP), podeEditar = () => ctx.podeEditar();
   const padrao = { ...(ctx.canal || {}) };
   let E = null, carregou = false, hist = [], jogo = null, unsubJogo = null, jogoChave = "";
@@ -113,7 +128,8 @@ export function montarAoVivo(ctx) {
     boxTopo.append(cabecalho());
     atualizarPlayer();
     if (E && E.aoVivo && !srcAtual) boxDin.append(h("div", { class: "t-card" }, h("p", { class: "cap", text: "O canal do YouTube ainda não foi cadastrado no app." }), linkLive() && h("a", { class: "av-btn", href: linkLive(), target: "_blank", rel: "noopener" }, "Assistir no YouTube")));
-    if (E && E.jogoId) boxDin.append(cartaoPlacar());
+    if (MANUAL && E && E.aoVivo && E.manual) { jogo = jogoManual(E.manual); boxDin.append(cartaoPlacar()); if (podeEditar()) boxDin.append(controlesPlacar()); }
+    else if (E && E.jogoId) boxDin.append(cartaoPlacar());
     if (E && E.aoVivo && E.igAtivo && igUser()) boxDin.append(h("a", { class: "av-btn av-ig", href: "https://www.instagram.com/" + igUser() + "/live/", target: "_blank", rel: "noopener" }, "● Ao vivo também no Instagram @" + igUser()));
     boxDin.append(cartaoHistorico());
     const { T: tA, js: jA } = jogosDisponiveis(), chave = podeEditar() + "|" + (tA ? tA.id : "") + "|" + jA.map(j => j.id).join(",");
@@ -148,7 +164,7 @@ export function montarAoVivo(ctx) {
         h("b", { class: "av-eq dir" + cls(1), text: nB })),
       !p.fim && !p.wo && h("div", { class: "av-atual" }, h("span", { text: p.atual[0] }), h("small", { text: p.rotAtual }), h("span", { text: p.atual[1] })),
       p.parciais.length > 0 && h("p", { class: "cap t-centro", text: (esporte === "biribol" ? "Sets: " : "") + p.parciais.join(" · ") }),
-      ctx.abrirSumula && ctx.torneioId && ctx.torneioId() === E.torneioId && h("button", { type: "button", class: "ghost", onclick: () => ctx.abrirSumula(E.jogoId) }, podeEditar() ? "Abrir súmula (marcar pontos)" : "Ver súmula"));
+      !MANUAL && ctx.abrirSumula && ctx.torneioId && ctx.torneioId() === E.torneioId && h("button", { type: "button", class: "ghost", onclick: () => ctx.abrirSumula(E.jogoId) }, podeEditar() ? "Abrir súmula (marcar pontos)" : "Ver súmula"));
   }
 
   function cartaoHistorico() {
@@ -169,7 +185,9 @@ export function montarAoVivo(ctx) {
           h("div", { class: "t-linha" },
             x.videoId && h("a", { class: "av-link", href: "https://www.youtube.com/watch?v=" + x.videoId, target: "_blank", rel: "noopener" }, "YouTube"),
             podeEditar() && h("button", { type: "button", class: "ghost mini", onclick: () => { editHist = editHist === x.id ? null : x.id; atualizar(); } }, "Editar"),
-            podeEditar() && ctx.perguntar && h("button", { type: "button", class: "ghost mini", onclick: () => ctx.perguntar("Tirar \"" + (x.titulo || "Transmissão") + "\" da lista? O vídeo continua no YouTube.", () => deleteDoc(doc(db, "ao_vivo", APP, "historico", x.id)).catch(() => toast("Não deu para apagar.")), "Tirar da lista") }, "Tirar")),
+            podeEditar() && h("button", { type: "button", class: "ghost mini", onclick: ev => { const tirar = () => deleteDoc(doc(db, "ao_vivo", APP, "historico", x.id)).catch(() => toast("Não deu para apagar."));
+              if (ctx.perguntar) return ctx.perguntar("Tirar \"" + (x.titulo || "Transmissão") + "\" da lista? O vídeo continua no YouTube.", tirar, "Tirar da lista");
+              const b = ev.currentTarget; if (b.dataset.armado) return tirar(); b.dataset.armado = "1"; b.textContent = "Confirmar"; setTimeout(() => { delete b.dataset.armado; b.textContent = "Tirar"; }, 4000); } }, "Tirar")),
           editHist === x.id && formHist(x)));
       lista.append(item);
     });
@@ -197,13 +215,18 @@ export function montarAoVivo(ctx) {
   }
   function painelEditor() {
     const vivo = E && E.aoVivo, { T, js } = jogosDisponiveis();
-    if (!rasc || rasc.vivo !== !!vivo) rasc = { vivo: !!vivo, titulo: vivo ? E.titulo || "" : (T ? T.nome : ""), jogoId: E && E.jogoId && E.torneioId === (T && T.id) ? E.jogoId : (js[0] && js[0].status === "andamento" ? js[0].id : ""), link: vivo && E.videoId ? "https://youtu.be/" + E.videoId : "", ig: vivo ? !!E.igAtivo : false, igUser: igUser() };
+    if (!rasc || rasc.vivo !== !!vivo) rasc = { vivo: !!vivo, titulo: vivo ? E.titulo || "" : (T ? T.nome : ""), jogoId: E && E.jogoId && E.torneioId === (T && T.id) ? E.jogoId : (js[0] && js[0].status === "andamento" ? js[0].id : ""), link: vivo && E.videoId ? "https://youtu.be/" + E.videoId : "", ig: vivo ? !!E.igAtivo : false, igUser: igUser(),
+      nomeA: E && E.manual && E.manual.nomeA || "Time A", nomeB: E && E.manual && E.manual.nomeB || "Time B" };
     const nome = id => (T && T.equipes.find(e => e.id === id) || {}).nome || "—";
     const f = h("form", { class: "t-card t-form", onsubmit: e => { e.preventDefault(); iniciar(T, js); } },
       h("h3", { text: vivo ? "Transmissão no ar" : "Começar transmissão" }),
       !vivo && h("p", { class: "cap", text: "1) Comece a live no YouTube (celular, Streamlabs, Prism ou OBS). 2) Aqui, escolha o jogo e toque em Começar: todos veem o vídeo e o placar da súmula no app." }),
       h("label", { class: "t-lbl" }, "Título", h("input", { id: "av-tit", value: rasc.titulo, oninput: e => rasc.titulo = e.target.value, placeholder: "Ex.: 5ª etapa · Final" })),
-      h("label", { class: "t-lbl" }, "Jogo em destaque (placar ao vivo)",
+      MANUAL && h("div", { class: "av-times" },
+        h("label", { class: "t-lbl" }, "Time A", h("input", { id: "av-na", value: rasc.nomeA, oninput: e => rasc.nomeA = e.target.value, placeholder: "Time A", maxlength: 30 })),
+        h("label", { class: "t-lbl" }, "Time B", h("input", { id: "av-nb", value: rasc.nomeB, oninput: e => rasc.nomeB = e.target.value, placeholder: "Time B", maxlength: 30 }))),
+      MANUAL && h("p", { class: "cap", text: "O placar do rachão é marcado aqui mesmo, com os botões que aparecem acima quando a transmissão está no ar." }),
+      !MANUAL && h("label", { class: "t-lbl" }, "Jogo em destaque (placar ao vivo)",
         h("select", { id: "av-jogo", onchange: e => rasc.jogoId = e.target.value },
           h("option", { value: "", selected: !rasc.jogoId }, "Nenhum (só o vídeo)"),
           js.map(j => h("option", { value: j.id, selected: rasc.jogoId === j.id }, (j.status === "andamento" ? "● " : j.status === "encerrado" ? "✓ " : "") + nome(j.a) + " x " + nome(j.b) + " — " + rotuloJogo(T, j))))),
@@ -212,7 +235,8 @@ export function montarAoVivo(ctx) {
       rasc.ig && h("label", { class: "t-lbl" }, "Perfil do Instagram", h("input", { id: "av-ig", value: rasc.igUser, oninput: e => rasc.igUser = e.target.value, placeholder: "usuario" })),
       h("div", { class: "t-linha" },
         h("button", { type: "submit" }, vivo ? "Atualizar" : "Começar transmissão"),
-        vivo && h("button", { type: "button", class: "danger", onclick: () => ctx.perguntar ? ctx.perguntar("Encerrar a transmissão? Ela vai para a lista de transmissões passadas.", encerrar, "Encerrar") : encerrar() }, "Encerrar transmissão")),
+        vivo && h("button", { type: "button", class: "danger", onclick: ev => { if (ctx.perguntar) return ctx.perguntar("Encerrar a transmissão? Ela vai para a lista de transmissões passadas.", encerrar, "Encerrar");
+          const b = ev.currentTarget; if (b.dataset.armado) return encerrar(); b.dataset.armado = "1"; b.textContent = "Toque de novo para encerrar"; setTimeout(() => { delete b.dataset.armado; b.textContent = "Encerrar transmissão"; }, 4000); } }, "Encerrar transmissão")),
       vivo && !E.videoId && h("p", { class: "cap", text: E.videoIdAuto ? "Vídeo da live identificado: ele entra no histórico ao encerrar." : "Dica: cole o link da live para o histórico guardar o vídeo certo (ou abra esta aba durante a live para o app identificar sozinho)." }));
     return f;
   }
@@ -223,19 +247,24 @@ export function montarAoVivo(ctx) {
     const j = js.find(x => x.id === rasc.jogoId), nome = id => (T && T.equipes.find(e => e.id === id) || {}).nome || "";
     const vivoAntes = E && E.aoVivo;
     const d = {
-      aoVivo: true, titulo: rasc.titulo.trim() || (T ? T.nome : "Transmissão ao vivo"), videoId: vid || null,
+      aoVivo: true, titulo: rasc.titulo.trim() || (T ? T.nome : MANUAL ? (ctx.rotuloManual || "Rachão") + " " + dataHora(Date.now()).slice(0, 5) : "Transmissão ao vivo"), videoId: vid || null,
       inicio: vivoAntes && E.inicio ? E.inicio : Date.now(), igAtivo: !!rasc.ig, igUsuario: (rasc.igUser || "").replace(/^@/, "").trim(),
       col, torneioId: j && T ? T.id : null, torneioNome: j && T ? T.nome : null, jogoId: j ? j.id : null,
       nomeA: j ? nome(j.a) : null, nomeB: j ? nome(j.b) : null, rotulo: j ? rotuloJogo(T, j) : null, esporte,
       marca: ctx.marca || null, autor: ctx.autor ? ctx.autor() || null : null, atualizado: Date.now()
     };
     if (!vivoAntes) d.videoIdAuto = null;
+    if (MANUAL) {
+      const nA = (rasc.nomeA || "").trim() || "Time A", nB = (rasc.nomeB || "").trim() || "Time B";
+      Object.assign(d, { nomeA: nA, nomeB: nB, rotulo: ctx.rotuloManual || "Rachão", torneioId: null, jogoId: null,
+        manual: { nomeA: nA, nomeB: nB, sets: vivoAntes && E.manual && E.manual.sets ? E.manual.sets : [{ a: 0, b: 0 }] } });
+    }
     try { await setDoc(refEstado, d, { merge: true }); toast(vivoAntes ? "Transmissão atualizada." : "Transmissão no ar no app."); rasc = null; painelSujo = true; }
     catch (e) { console.error(e); toast("Não deu para salvar. Verifique se você está logado como editor."); }
   }
   async function encerrar() {
     if (!E) return;
-    const p = placarVivo(esporte, jogo);
+    const p = placarVivo(esporte, MANUAL && E.manual ? jogoManual(E.manual) : jogo);
     const item = { titulo: E.titulo || "Transmissão", videoId: E.videoId || E.videoIdAuto || null, inicio: E.inicio || Date.now(), fim: Date.now(),
       rotulo: E.rotulo || null, nomeA: E.nomeA || null, nomeB: E.nomeB || null, placar: p ? p.grande.join(" x ") : null, torneioNome: E.torneioNome || null, canalId: canalId() || null };
     try {
@@ -243,6 +272,37 @@ export function montarAoVivo(ctx) {
       await updateDoc(refEstado, { aoVivo: false, videoId: null, videoIdAuto: null, igAtivo: false, fim: Date.now() });
       rasc = null; painelSujo = true; toast("Transmissão encerrada e guardada na lista.");
     } catch (e) { console.error(e); toast("Não deu para encerrar. Verifique se você está logado como editor."); }
+  }
+
+  // botões do placar manual (biribol: sets de 21/21/15 com 2 de vantagem, como na súmula)
+  function controlesPlacar() {
+    const sets = () => (E.manual.sets || []).map(x => ({ a: x.a || 0, b: x.b || 0 }));
+    const salvar = async novo => {
+      E.manual = { ...E.manual, sets: novo }; atualizar();
+      try { await setDoc(refEstado, { manual: { ...E.manual, sets: novo }, atualizado: Date.now() }, { merge: true }); } catch (e) { console.error(e); toast("Não deu para salvar o placar."); }
+    };
+    const mais = (lado, n) => {
+      let ss = sets(); if (!ss.length) ss = [{ a: 0, b: 0 }];
+      const r = C.resultado(esporte, { a: "A", b: "B", sets: ss });
+      let i = ss.findIndex((x, k) => !C.setFechado(x.a, x.b, k));
+      if (n > 0) {
+        if (r.fim) { toast("Jogo encerrado. Toque em Novo jogo para começar outro."); return; }
+        if (i < 0) { ss.push({ a: 0, b: 0 }); i = ss.length - 1; }
+      } else {
+        if (i < 0 || (!ss[i].a && !ss[i].b && i > 0)) { if (i > 0 && !ss[i].a && !ss[i].b) ss.splice(i, 1); i = ss.length - 1; }
+        if (!ss[i][lado]) return;
+      }
+      ss[i] = { ...ss[i], [lado]: ss[i][lado] + n }; salvar(ss);
+    };
+    const nA = E.manual.nomeA || "Time A", nB = E.manual.nomeB || "Time B";
+    return h("div", { class: "t-card av-ctl" },
+      h("span", { class: "t-sub", text: "Marcar pontos" }),
+      h("div", { class: "av-ctl-g" },
+        h("button", { type: "button", class: "av-mais", onclick: () => mais("a", 1) }, "+1 " + nA),
+        h("button", { type: "button", class: "av-mais", onclick: () => mais("b", 1) }, "+1 " + nB),
+        h("button", { type: "button", class: "ghost", onclick: () => mais("a", -1) }, "−1 " + nA),
+        h("button", { type: "button", class: "ghost", onclick: () => mais("b", -1) }, "−1 " + nB)),
+      h("button", { type: "button", class: "ghost", onclick: ev => { const b = ev.currentTarget; if (!b.dataset.armado) { b.dataset.armado = "1"; b.textContent = "Toque de novo para zerar"; setTimeout(() => { delete b.dataset.armado; b.textContent = "Novo jogo (zerar placar)"; }, 4000); return; } salvar([{ a: 0, b: 0 }]); } }, "Novo jogo (zerar placar)"));
   }
 
   function cartaoCanal() {

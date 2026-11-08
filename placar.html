@@ -47,7 +47,8 @@ const $ = id => document.getElementById(id);
 let E = null, J = null, chave = "", unsub = null;
 function pintar() {
   const bug = $("bug");
-  if (!E || !E.aoVivo || !E.jogoId) { bug.classList.remove("on"); return; }
+  if (E && E.manual) J = av.jogoManual(E.manual);
+  if (!E || !E.aoVivo || !(E.jogoId || E.manual)) { bug.classList.remove("on"); return; }
   const m = E.marca || {}, r = document.documentElement.style;
   if (m.escura) r.setProperty("--escura", m.escura); if (m.cor) r.setProperty("--cor", m.cor); if (m.destaque) r.setProperty("--destaque", m.destaque);
   if (m.logo && $("logo").getAttribute("src") !== m.logo) $("logo").src = m.logo;
