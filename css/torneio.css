@@ -32,8 +32,9 @@
 .t-mini{padding:6px 10px;font-size:13px}
 .t-eqnome{font-weight:600;flex:1}
 .t-atletas{display:flex;flex-direction:column;gap:6px}
-.t-atleta{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:6px;align-items:center}
-.t-atletas.ro .t-atleta{grid-template-columns:34px minmax(0,1fr)}
+.t-atleta{display:grid;grid-template-columns:62px minmax(0,1fr) auto auto;gap:6px;align-items:center}
+.t-atleta.t-novo{grid-template-columns:62px minmax(0,1fr) auto}
+.t-atletas.ro .t-atleta{grid-template-columns:34px minmax(0,1fr) auto}
 .t-num{text-align:center}
 .t-camisa{display:inline-grid;place-items:center;min-width:28px;height:28px;padding:0 4px;border-radius:8px;background:var(--soft);border:1px solid var(--line);font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
 .t-novo{padding-top:6px;border-top:1px dashed var(--line)}
