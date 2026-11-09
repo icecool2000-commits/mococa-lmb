@@ -830,3 +830,60 @@ export async function sumulaXLSX(T, j, esporte, marca) {
   });
   await salvarXL(wb, nomeSumula(T, j, D, "xlsx"));
 }
+
+/* ======================= RELATÓRIO DAS ABAS DE ESTATÍSTICAS ======================= */
+// spec = { titulo, sub, arquivo, blocos: [
+//   { t: "quadros", titulo, itens: [[rótulo, valor, detalhe]] },
+//   { t: "barras", titulo, cap, itens: [{ nome, sub, v, txt, extra, hi }], pos, saldo },
+//   { t: "tabela", titulo, cap, cab: [..], linhas: [[..]], esq: [índices alinhados à esquerda] } ] }
+const nomeArq = s => (s || "estatisticas").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+// texto seguro para as fontes padrão do PDF (sem emoji e com sinal de menos comum)
+const txtPDF = v => v == null ? "–" : typeof v === "number" ? v : String(v).replace(/−/g, "-").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\uFE0F]/gu, "").replace(/\s{2,}/g, " ").trim();
+export async function estatPDF(specIn, marca) {
+  const jsPDF = await libPDF(), logo = await logoDataUrl(marca.logo, marca.fundoLogo);
+  // limitePDF: listas longas só com os primeiros no PDF (o Excel leva tudo)
+  const spec = { ...specIn, titulo: txtPDF(specIn.titulo), sub: txtPDF(specIn.sub || ""), blocos: specIn.blocos.map(b => b.t === "quadros" ? { ...b, itens: b.itens.map(i => i.map(txtPDF)) }
+    : b.t === "barras" ? { ...b, cap: b.limitePDF && b.itens.length > b.limitePDF ? (b.cap ? b.cap + " · " : "") + "os " + b.limitePDF + " primeiros (lista completa no Excel)" : b.cap, itens: (b.limitePDF ? b.itens.slice(0, b.limitePDF) : b.itens).map(i => ({ ...i, nome: txtPDF(i.nome), sub: i.sub && txtPDF(i.sub), txt: txtPDF(i.txt != null ? i.txt : i.fmt != null ? i.fmt : i.v), extra: i.extra && txtPDF(i.extra) })) }
+    : { ...b, linhas: b.linhas.map(l => l.map(txtPDF)) }) };
+  const largo = spec.blocos.some(b => b.t === "tabela" && b.cab.length > 9);
+  const doc = pdfBase(jsPDF, marca, { T: { nome: spec.titulo } }, spec.sub || "Estatísticas", largo ? "landscape" : "portrait");
+  let y = cabecalho(doc, logo, spec.titulo, spec.sub || "");
+  spec.blocos.forEach(b => {
+    if (b.t === "quadros" && b.itens.length) { if (b.titulo) y = secao(doc, y, b.titulo, logo); y = quadros(doc, y, b.itens.map(([a, v, c]) => [a, v == null ? "–" : v, c || ""]), logo); }
+    else if (b.t === "barras") {
+      y = secao(doc, y, b.titulo, logo);
+      if (b.cap) { doc.setFontSize(8.5); doc.setTextColor("#666"); doc.text(doc.splitTextToSize(b.cap, doc.internal.pageSize.getWidth() - 24)[0], 14, y); doc.setTextColor("#1a1a1a"); y += 4; }
+      y = barrasPDF(doc, y, b.itens.map(i => ({ ...i, txt: i.txt != null ? i.txt : i.fmt })), { pos: b.pos, saldo: b.saldo }, logo);
+    } else if (b.t === "tabela") {
+      y = secao(doc, y, b.titulo, logo);
+      if (b.cap) { doc.setFontSize(8.5); doc.setTextColor("#666"); doc.text(doc.splitTextToSize(b.cap, doc.internal.pageSize.getWidth() - 24)[0], 14, y); doc.setTextColor("#1a1a1a"); y += 4; }
+      const cs = {}; (b.esq || [0]).forEach(i => cs[i] = { halign: "left" }); if ((b.esq || [0]).includes(0)) cs[0].fontStyle = "bold";
+      const fs = b.cab.length > 12 ? 6.6 : b.cab.length > 8 ? 7.6 : 8.6;
+      y = tabela(doc, y, { head: [b.cab], body: b.linhas.length ? b.linhas.map(l => l.map(v => v == null ? "–" : String(v))) : [[{ content: "Sem dados.", colSpan: b.cab.length }]],
+        styles: { fontSize: fs, halign: "center", cellPadding: 1.3, lineColor: "#cfd6de", lineWidth: 0.15 }, columnStyles: cs }, logo);
+    }
+  });
+  rodapes(doc);
+  baixar(doc.output("blob"), (spec.arquivo || nomeArq(spec.titulo + " " + (spec.sub || ""))) + ".pdf");
+}
+export async function estatXLSX(spec, marca) {
+  const ExcelJS = await libXLSX(), logo = await logoDataUrl(marca.logo, marca.fundoLogo), E = estilos(marca);
+  const wb = new ExcelJS.Workbook(); wb.creator = marca.titulo; wb.created = new Date();
+  const ws = folha(wb, "Resumo", marca, logo, spec.titulo, spec.sub || "", [8, 34, 16, 44]);
+  const usados = new Set(["Resumo"]);
+  spec.blocos.forEach(b => {
+    if (b.t === "quadros" && b.itens.length) { tituloSecao(ws, b.titulo || "Números", E); tabelaXL(ws, ["", "Indicador", "Valor", "Detalhe"], b.itens.map(([a, v, c]) => ["", a, v == null ? "" : v, c || ""]), E, { esq: [1, 3], negrito: [2] }); }
+    else if (b.t === "barras") {
+      tituloSecao(ws, b.titulo, E);
+      tabelaXL(ws, ["#", "Nome", "Valor", "Detalhe"], b.itens.map((i, k) => [b.pos === false ? "" : k + 1, i.nome + (i.sub ? " · " + i.sub : ""), i.txt != null ? i.txt : i.fmt != null ? i.fmt : i.v, i.extra || ""]), E, { esq: [1, 3], negrito: [2] });
+    } else if (b.t === "tabela") {
+      let nome = (b.titulo || "Tabela").replace(/[\\/?*[\]:]/g, " ").slice(0, 28), n = 2; while (usados.has(nome)) nome = nome.slice(0, 26) + " " + n++;
+      usados.add(nome);
+      const larg = b.cab.map((c, i) => (b.esq || [0]).includes(i) ? 30 : Math.max(9, String(c).length + 3));
+      const wt = folha(wb, nome, marca, logo, spec.titulo, (spec.sub ? spec.sub + " · " : "") + b.titulo, larg, b.cab.length > 8);
+      if (b.cap) { const r = wt.__linha; wt.mergeCells(r, 1, r, wt.__n); const c = wt.getCell(r, 1); c.value = b.cap; c.font = { italic: true, size: 10, color: { argb: "FF666666" } }; wt.__linha = r + 2; }
+      tabelaXL(wt, b.cab, b.linhas.map(l => l.map(v => v == null ? "–" : v)), E, { esq: b.esq || [0], negrito: [0] });
+    }
+  });
+  await salvarXL(wb, (spec.arquivo || nomeArq(spec.titulo + " " + (spec.sub || ""))) + ".xlsx");
+}

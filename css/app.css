@@ -211,7 +211,7 @@ footer{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;font-size:13p
 .t-terc .t-rodtit{color:#e2a46e}
 .t-tab tr.p1 td:first-child{color:var(--ouro)} .t-tab tr.p2 td:first-child{color:var(--prata)} .t-tab tr.p3 td:first-child{color:var(--bronze)}
 .t-modal-sum{background:var(--bg)}
-.abas{grid-template-columns:repeat(5,minmax(0,1fr))}
+.abas{grid-template-columns:repeat(3,minmax(0,1fr))}
 .abas button{font-size:12px;padding:9px 2px}
 
 /* guia de início */

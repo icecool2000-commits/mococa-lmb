@@ -6,6 +6,7 @@ import * as X from "./exportar.js";
 import { montarMidias } from "./midias.js";
 import { montarAoVivo } from "./aovivo.js";
 import * as R from "./rodizio.js";
+import { montarEstatEquipe, botoesRelatorio } from "./estatequipe.js";
 
 export function montarTorneio(ctx) {
   const { db, fs, esporte, col, maxAtletas, toast } = ctx;
@@ -60,6 +61,9 @@ export function montarTorneio(ctx) {
     render();
   }, 0);
   const SERIES_OK = !!ctx.formatoSeries;
+  // aba "Estatísticas por Equipe" (ctx.statsEquipe): escolhe torneio (ou todos) e equipe
+  let EQ = null;
+  if (ctx.statsEquipe) setTimeout(() => { EQ = montarEstatEquipe({ db, fs: ctx.fs, esporte, fontes: [[col, "Este app"]], marca: ctx.marca, toast, render, X, torneioAtual: () => T && T.id, titulo: "Estatísticas por equipe" }); render(); }, 0);
   const ROD = !!ctx.rodizio && esporte === "biribol"; // rodízio dos jogadores na súmula (Liga)
   C.definirRegra({ pontosSets: !!ctx.pontosSets });
   const PTS = () => C.REGRA.pontosSets;
@@ -118,10 +122,10 @@ export function montarTorneio(ctx) {
       return;
     }
     const vivo = AV && AV.estado() && AV.estado().aoVivo;
-    const abas = [["geral", "Torneio"], ["equipes", "Equipes"], ["chaves", "Chaves e jogos"], ["stats", "Estatísticas"], ...(MID ? [["midias", "Mídias"]] : []), ...(AV ? [["aovivo", vivo ? "● Ao vivo" : "Ao vivo"]] : [])];
+    const abas = [["geral", "Torneio"], ["equipes", "Equipes"], ["chaves", "Chaves e jogos"], ["stats", ctx.rotuloStats || "Estatísticas"], ...(EQ ? [["equipe", "Estatísticas por Equipe"]] : []), ...(MID ? [["midias", "Mídias"]] : []), ...(AV ? [["aovivo", vivo ? "● Ao vivo" : "Ao vivo"]] : [])];
     root.append(h("div", { class: "t-abas" + (abas.length > 5 ? " t-abas6" : ""), role: "tablist" }, abas.map(([k, t]) =>
       h("button", { type: "button", role: "tab", class: k === "aovivo" && vivo ? "t-aba-vivo" : null, "aria-selected": String(aba === k), onclick: () => { aba = k; ls.set("aba", k); render(); } }, t))));
-    const corpo = { geral: telaGeral, equipes: telaEquipes, chaves: telaChaves, stats: telaStats, midias: MID ? MID.tela : null, aovivo: AV ? AV.tela : null }[aba] || telaGeral;
+    const corpo = { geral: telaGeral, equipes: telaEquipes, chaves: telaChaves, stats: telaStats, equipe: EQ ? EQ.tela : null, midias: MID ? MID.tela : null, aovivo: AV ? AV.tela : null }[aba] || telaGeral;
     root.append(corpo());
     if (sumulaJid) root.append(telaSumula());
     document.body.style.overflow = sumulaJid ? "hidden" : "";
@@ -953,6 +957,9 @@ export function montarTorneio(ctx) {
   /* ---------- estatísticas ---------- */
   function telaStats() {
     const w = h("div", { class: "t-col" });
+    // relatório (PDF/Excel) com os mesmos números desta tela
+    const rel = { titulo: (ctx.rotuloStats || "Estatísticas") + " · " + T.nome, sub: "", blocos: [] };
+    const relBar = (titulo, cap, itens, extra) => rel.blocos.push({ t: "barras", titulo, cap, itens: itens.map(i => ({ nome: i.nome, sub: i.sub, v: i.v, txt: i.fmt != null ? i.fmt : i.v, extra: i.extra, hi: i.hi })), ...(extra || {}) });
     const fases = [...new Set(jogos.map(C.faseEstat))];
     const ordemF = C.ORDEM_FASES;
     fases.sort((a, b) => ordemF.indexOf(a) - ordemF.indexOf(b));
@@ -961,6 +968,8 @@ export function montarTorneio(ctx) {
       h("select", { "aria-label": "Fase", onchange: e => { filtroFase = e.target.value; render(); } }, h("option", { value: "todas" }, "Todas as fases"), fases.map(f => h("option", { value: f, selected: f === filtroFase }, f)))));
     const faseDe = C.faseEstat;
     const js = jogos.filter(j => !j.wo && j.status === "encerrado" && (filtroEtapa === "todas" || j.etapa === +filtroEtapa) && (filtroFase === "todas" || faseDe(j) === filtroFase));
+    rel.sub = (filtroEtapa === "todas" ? "Todas as etapas" : (T.etapas[+filtroEtapa] || {}).nome) + " · " + (filtroFase === "todas" ? "todas as fases" : filtroFase);
+    w.append(botoesRelatorio(rel, { toast, marca: ctx.marca, X }));
     if (!js.length) { w.append(h("div", { class: "t-card" }, h("p", { class: "cap", text: "As estatísticas aparecem quando houver jogos encerrados." }))); }
     const sa = C.statsAtletas(js);
     const todosAtl = T.equipes.flatMap(e => (e.atletas || []).map(a => ({ ...a, eid: e.id, enome: e.nome, ...(sa[a.id] || { p: 0, b: 0, as: 0, jogos: 0 }) })));
@@ -993,6 +1002,7 @@ export function montarTorneio(ctx) {
         [BIR ? "Bloqueios" : "Tocos", totB, "média " + fmt1(totB / js.length) + " por jogo"],
         ["Assistências", totA, "média " + fmt1(totA / js.length) + " por jogo"]];
       if (!BIR) tiles.push(["Empates", js.length - decididos, "na fase de classificação"]);
+      rel.blocos.push({ t: "quadros", titulo: "Estatísticas gerais", itens: tiles.map(([a, b, c]) => [a, b, c]) });
       w.append(h("div", { class: "card" }, h("h3", { text: "Estatísticas gerais" }), h("p", { class: "cap", text: "Números do filtro escolhido acima" }),
         h("div", { class: "tiles" }, tiles.map(([a, b, c]) => h("div", { class: "tile" }, h("span", { text: a }), h("b", { text: b }), h("small", { text: c }))))));
       // média de pontos por fase
@@ -1001,6 +1011,7 @@ export function montarTorneio(ctx) {
       const fasesOrd = Object.keys(porFase).sort((a, b) => ordemF.indexOf(a) - ordemF.indexOf(b));
       if (fasesOrd.length > 1) {
         const mf = Math.max(...fasesOrd.map(f => porFase[f].p / porFase[f].n));
+        relBar("Média de pontos por jogo, por fase", "Soma das duas equipes", fasesOrd.map(f => ({ nome: f, v: porFase[f].p / porFase[f].n, fmt: fmt1(porFase[f].p / porFase[f].n), extra: porFase[f].n + " jogos" })), { pos: false });
         w.append(h("div", { class: "card" }, h("h3", { text: "Média de pontos por jogo, por fase" }), h("p", { class: "cap", text: "Soma das duas equipes" }),
           barrasH(fasesOrd.map(f => ({ nome: f, v: Number(fmt1(porFase[f].p / porFase[f].n).replace(",", ".")), fmt: fmt1(porFase[f].p / porFase[f].n), extra: porFase[f].n + (porFase[f].n === 1 ? " jogo" : " jogos"), hi: porFase[f].p / porFase[f].n === mf })), "", false, true, true)));
       }
@@ -1008,11 +1019,13 @@ export function montarTorneio(ctx) {
       const eqm = {};
       js.forEach(j => { const r = res(j); [[j.a, r.pa, r.pb], [j.b, r.pb, r.pa]].forEach(([e, pf, pc]) => { const x = eqm[e] || (eqm[e] = { n: 0, pf: 0, pc: 0 }); x.n++; x.pf += pf; x.pc += pc; }); });
       const eqOrd = Object.keys(eqm).sort((a, b) => eqm[b].pf / eqm[b].n - eqm[a].pf / eqm[a].n);
+      relBar("Média de pontos de cada equipe", "Pontos feitos por jogo · ao lado, quantos sofre por jogo", eqOrd.map((e, i) => ({ nome: eqNome(e), v: eqm[e].pf / eqm[e].n, fmt: fmt1(eqm[e].pf / eqm[e].n), extra: "sofre " + fmt1(eqm[e].pc / eqm[e].n) + " · " + eqm[e].n + " jogos", hi: i === 0 })));
       w.append(h("div", { class: "card" }, h("h3", { text: "Média de pontos de cada equipe" }), h("p", { class: "cap", text: "Pontos feitos por jogo · ao lado, quantos sofre por jogo" }),
         barrasH(eqOrd.map((e, i) => ({ nome: eqNome(e), v: eqm[e].pf / eqm[e].n, fmt: fmt1(eqm[e].pf / eqm[e].n), extra: "sofre " + fmt1(eqm[e].pc / eqm[e].n) + " · " + eqm[e].n + (eqm[e].n === 1 ? " jogo" : " jogos"), hi: i === 0 })), "Sem dados ainda.", false, true)));
       // média de pontos de cada atleta (pontos ÷ jogos da equipe)
       const jogosEq = {}; js.forEach(j => { jogosEq[j.a] = (jogosEq[j.a] || 0) + 1; jogosEq[j.b] = (jogosEq[j.b] || 0) + 1; });
       const medAt = todosAtl.filter(a => jogosEq[a.eid]).map(a => ({ ...a, med: a.p / jogosEq[a.eid], nj: jogosEq[a.eid] })).sort((x, y) => y.med - x.med || x.nome.localeCompare(y.nome, "pt-BR"));
+      relBar("Média de pontos de cada atleta", "Pontos por jogo da equipe", medAt.map((a, i) => ({ nome: a.nome, sub: a.enome, v: a.med, fmt: fmt1(a.med), extra: a.p + " pts em " + a.nj + " jogos", hi: i === 0 && a.med > 0 })), { limitePDF: 30 });
       const verTodos = ls.get("medias-todos") === "1";
       const lista = verTodos ? medAt : medAt.slice(0, 10);
       w.append(h("div", { class: "card" }, h("h3", { text: "Média de pontos de cada atleta" }),
@@ -1032,6 +1045,7 @@ export function montarTorneio(ctx) {
     const top10 = [...comJogo].sort((x, y) => y.p - x.p || x.nome.localeCompare(y.nome, "pt-BR")).slice(0, 10);
     const bot10 = [...comJogo].sort((x, y) => x.p - y.p || x.nome.localeCompare(y.nome, "pt-BR")).slice(0, 10);
     const lin = a => ({ nome: a.nome, sub: a.enome, v: a.p, extra: a.b + (BIR ? " blq · " : " toco · ") + a.as + " ast" });
+    relBar("10 maiores pontuadores", "Geral do filtro escolhido", top10.map(lin)); relBar("10 menores pontuadores", "Entre atletas de equipes que jogaram", bot10.map(lin));
     w.append(h("div", { class: "card" }, h("h3", { text: "10 maiores pontuadores" }), h("p", { class: "cap", text: "Geral do filtro escolhido" }), barrasH(top10.map((a, i) => ({ ...lin(a), hi: i === 0 && a.p > 0 })), "Sem dados ainda.")));
     w.append(h("div", { class: "card" }, h("h3", { text: "10 menores pontuadores" }), h("p", { class: "cap", text: "Entre atletas de equipes que jogaram" }), barrasH(bot10.map(lin), "Sem dados ainda.", true)));
     // pontos das equipes por fase
@@ -1041,6 +1055,9 @@ export function montarTorneio(ctx) {
       [[j.a, r.pa, r.pb], [j.b, r.pb, r.pa]].forEach(([e, pf, pc]) => { if (!pts[e]) return; const x = pts[e][f] || (pts[e][f] = { pf: 0, pc: 0 }); x.pf += pf; x.pc += pc; pts[e].geral.pf += pf; pts[e].geral.pc += pc; }); });
     const ord = T.equipes.filter(e => jogaram.has(e.id)).sort((a, b) => (pts[b.id].geral.pf - pts[b.id].geral.pc) - (pts[a.id].geral.pf - pts[a.id].geral.pc));
     const sal = x => x ? x.pf - x.pc : null, fmtS = v => v == null ? "–" : (v > 0 ? "+" : "") + v;
+    relBar("Saldo de pontos das equipes", "Pontos feitos menos pontos tomados · geral", ord.map(e => ({ nome: e.nome, v: sal(pts[e.id].geral), fmt: fmtS(sal(pts[e.id].geral)) })), { saldo: true });
+    rel.blocos.push({ t: "tabela", titulo: "Pontos feitos, tomados e saldo", cap: "PF = feitos · PT = tomados · por fase e geral",
+      cab: ["Equipe", ...[...fasesTab, "Geral"].flatMap(f => [f + " PF", f + " PT", f + " Saldo"])], linhas: ord.map(e => [e.nome, ...[...fasesTab, "geral"].flatMap(f => { const x = pts[e.id][f]; return [x ? x.pf : "–", x ? x.pc : "–", fmtS(sal(x))]; })]) });
     w.append(h("div", { class: "card" }, h("h3", { text: "Saldo de pontos das equipes" }), h("p", { class: "cap", text: "Pontos feitos menos pontos tomados · geral" }), barrasSaldo(ord.map(e => ({ nome: e.nome, v: sal(pts[e.id].geral) })))));
     w.append(h("div", { class: "card" }, h("h3", { text: "Pontos feitos, tomados e saldo" }), h("p", { class: "cap", text: "PF = feitos · PT = tomados · por fase e geral" }),
       h("div", { class: "tablebox" }, h("table", { class: "t-tab t-tab-lg" },
@@ -1053,6 +1070,11 @@ export function montarTorneio(ctx) {
     todosJ.forEach(j => { const r = res(j); [j.a, j.b].forEach(e => { if (!vd[e]) return; const x = vd[e][j.etapa] || (vd[e][j.etapa] = { v: 0, d: 0, e: 0 }); if (r.empate) x.e++; else if (r.venc === e) x.v++; else x.d++; }); });
     const tot = e => Object.values(vd[e]).reduce((s, x) => ({ v: s.v + x.v, d: s.d + x.d, e: s.e + x.e }), { v: 0, d: 0, e: 0 });
     const ordVD = [...T.equipes].sort((a, b) => tot(b.id).v - tot(a.id).v || tot(a.id).d - tot(b.id).d);
+    const txVD = x => x ? x.v + "V " + x.d + "D" + (x.e ? " " + x.e + "E" : "") : "–";
+    rel.blocos.push({ t: "tabela", titulo: "Painel de vitórias e derrotas", cap: "Por etapa e no total", cab: ["Equipe", ...T.etapas.map(et => et.nome), "Total"], linhas: ordVD.map(e => [e.nome, ...T.etapas.map((_, i) => txVD(vd[e.id][i])), txVD(tot(e.id))]) });
+    // pontuação por atleta de cada equipe (todas as equipes no relatório)
+    rel.blocos.push({ t: "tabela", titulo: "Pontuação dos atletas por equipe", cab: ["Atleta", "Equipe", "Nº", "Pontos", BIR ? "Bloqueios" : "Tocos", "Assist."], esq: [0, 1],
+      linhas: [...todosAtl].sort((x, y) => x.enome.localeCompare(y.enome, "pt-BR") || y.p - x.p).map(a => [a.nome, a.enome, a.num ?? "", a.p, a.b, a.as]) });
     const cel = x => x ? h("td", { class: "vd" }, h("span", { class: "v", text: x.v + "V" }), " ", h("span", { class: "d", text: x.d + "D" }), x.e ? h("span", { class: "e", text: " " + x.e + "E" }) : null) : h("td", { text: "–" });
     w.append(h("div", { class: "card" }, h("h3", { text: "Painel de vitórias e derrotas" }), h("p", { class: "cap", text: "Por etapa e no total" + (filtroFase !== "todas" ? " · fase: " + filtroFase : "") }),
       h("div", { class: "tablebox" }, h("table", { class: "t-tab t-tab-lg" },

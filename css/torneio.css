@@ -321,3 +321,22 @@ button.mini{padding:4px 10px;font-size:12px}
 .rz-sbtn.sug{border-color:var(--accent);box-shadow:0 0 0 3px rgb(0 0 0 / .04)}
 .rz-sbtn.amarelo.sug{border-color:#f2c21b;background:rgb(242 194 27 / .14)}
 .rz-sbtn.vermelho.sug{border-color:#e0282e;background:rgb(224 40 46 / .12)}
+/* Estatísticas por equipe + relatórios */
+.eqx-rel{display:flex;align-items:center;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.eqx-rel .cap{margin-right:auto}
+.eqx-fontes{display:flex;gap:6px;flex-wrap:wrap}
+.eqx-fontes button{flex:1 1 140px;background:var(--surface);color:var(--fg);border:1px solid var(--line)}
+.eqx-fontes button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg,#fff);border-color:var(--accent)}
+.eqx-filtros{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.eqx-filtros select{width:100%;min-width:0}
+@media (max-width:480px){.eqx-filtros{grid-template-columns:1fr}}
+.eqx-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.eqx-tile{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:9px 11px;min-width:0}
+.eqx-tile span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.eqx-tile b{display:block;font-size:24px;line-height:1.15;font-variant-numeric:tabular-nums}
+.eqx-tile small{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.eqx-forma{display:flex;flex-wrap:wrap;gap:4px}
+.eqx-forma span{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;font-weight:800;font-size:12px;color:#fff}
+.eqx-forma .v{background:var(--win,#2f86c8)}.eqx-forma .d{background:var(--loss,#c4544a)}.eqx-forma .e{background:#8a94a3}
+.eqx-tab{overflow-x:auto;max-width:100%}
+.eqx-tab td.v{color:var(--win,#2f86c8);font-weight:700}.eqx-tab td.d{color:var(--loss,#c4544a);font-weight:700}

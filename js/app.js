@@ -3,6 +3,8 @@ import * as C from "./calc.js";
 import { gerarDemo } from "./demo.js";
 import * as I from "./importar.js";
 import { montarTorneio } from "./torneio.js";
+import { montarEstatEquipe, botoesRelatorio } from "./estatequipe.js";
+import * as X from "./exportar.js";
 
 const COL_AT = "mococa_atletas", COL_ET = "mococa_etapas", COL_CONF = "confirmacoes";
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -22,13 +24,17 @@ export function montarApp(ctx) {
 
   // torneios completos (mesmo módulo do app da Liga), guardados em mococa_torneios
   const torRoot = document.createElement("div"); torRoot.className = "t-col";
+  const MARCA = { titulo: "Biribol Mococa na Liga", logo: "img/logo.jpg", escura: "#061535", cor: "#1a679f", destaque: "#e3b90f" };
   const torneio = montarTorneio({ db, fs: { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch }, esporte: "biribol", col: "mococa_torneios", maxAtletas: 8, toast,
     root: torRoot, podeEditar, nomeDemo: "Liga Metropolitana (simulação)", formatoSeries: true, pontosSets: true, autor: ctx.autor,
     rodizio: true,
     aoVivo: { app: "mococa", canal: { id: "UC8NzFZxYbM-XXdNFXOEk6vw", handle: "ligametropolitanadebiribol" }, canalDe: "lmb", instagram: "biribol_mococa" },
     midias: { app: "mococa", perfis: [{ usuario: "biribol_mococa", nome: "Biribol Mococa" }], hashtags: "#biribol #biribolmococa #ligametropolitana" },
     equipeCasa: () => ({ nome: CASA, atletas: [...ativos()].sort((a, b) => (a.num ?? 999) - (b.num ?? 999)) }),
-    marca: { titulo: "Biribol Mococa na Liga", logo: "img/logo.jpg", escura: "#061535", cor: "#1a679f", destaque: "#e3b90f" } });
+    marca: MARCA });
+  // Estatísticas por Equipe: qualquer equipe dos torneios da Liga ou da aba Torneios
+  const EQ = montarEstatEquipe({ db, fs: { collection, onSnapshot }, esporte: "biribol", fontes: [["lmb_torneios", "App da Liga"], ["mococa_torneios", "Torneios deste app"]],
+    marca: MARCA, toast, render: () => { if (aba === "equipes") render(); }, X, preferir: /mococa/i, titulo: "Estatísticas por equipe" });
 
   /* ---------- utilitários ---------- */
   function h(tag, props, ...kids) {
@@ -84,10 +90,10 @@ export function montarApp(ctx) {
     else if (edPartida && podeEditar()) root.append(telaPartida());
     else if (edEtapa && podeEditar()) root.append(telaEtapa());
     else {
-      const abas = [["historia", "História"], ["proxima", "Próxima etapa"], ["torneios", "Torneios"], ["atletas", "Atletas"], ["stats", "Estatísticas"]];
+      const abas = [["historia", "História"], ["proxima", "Próxima etapa"], ["torneios", "Torneios"], ["atletas", "Atletas"], ["stats", "Estatísticas Mococa"], ["equipes", "Estatísticas por Equipe"]];
       root.append(h("nav", { class: "abas", role: "tablist" }, abas.map(([k, t]) => h("button", { type: "button", role: "tab", "aria-selected": String(aba === k), onclick: () => { aba = k; ls.set("aba", k); atlSel = null; render(); window.scrollTo(0, 0); } }, t))));
       const ts = temporadas();
-      if (aba !== "proxima" && aba !== "torneios" && ts.length > 1) root.append(h("div", { class: "chips", "aria-label": "Temporada" },
+      if (aba !== "proxima" && aba !== "torneios" && aba !== "equipes" && ts.length > 1) root.append(h("div", { class: "chips", "aria-label": "Temporada" },
         [["todas", "Todas as temporadas"], ...ts.map(t => [String(t), "Temporada " + t])].map(([k, t]) => h("button", { type: "button", "aria-pressed": String(String(temp) === k), onclick: () => { temp = k; ls.set("temp", k); render(); } }, t))));
       if (erroLeitura) root.append(h("div", { class: "card" }, h("p", { class: "cap", style: "margin:0;color:var(--danger)", text: "Não deu para ler os dados (" + erroLeitura + "). Confira a internet e abra o app de novo; se continuar, avise o organizador." })));
       if (!carregou.at || !carregou.et) root.append(h("p", { class: "cap", text: "Carregando…" }));
@@ -96,6 +102,7 @@ export function montarApp(ctx) {
         else if (!ativos().length) root.append(h("div", { class: "card linha entre" }, h("p", { class: "cap", style: "margin:0", text: "Cadastre primeiro o elenco de Mococa: assim a equipe já entra no torneio com nomes e números." }), h("button", { type: "button", class: "ghost mini", onclick: () => irPara("atletas") }, "Abrir Atletas")));
         root.append(torRoot);
       }
+      else if (aba === "equipes") root.append(EQ.tela());
       else root.append(aba === "historia" ? telaHistoria() : aba === "proxima" ? telaProxima() : aba === "atletas" ? telaAtletas() : telaStats());
     }
     const cx = caixaPergunta(); if (cx) root.append(cx);
@@ -388,6 +395,25 @@ export function montarApp(ctx) {
 
     // participação
     w.append(cardBarras("Atletas por etapa", "Quantos atletas de Mococa jogaram cada etapa", pe.map(x => ({ nome: x.nome, sub: C.fmtData(x.data), v: x.nAtletas })), "", false));
+    // relatório (PDF/Excel) com os mesmos números
+    const sl = v => (v > 0 ? "+" : "") + v;
+    const rel = { titulo: "Estatísticas Mococa", sub: temp === "todas" ? "Todas as temporadas" : "Temporada " + temp, blocos: [
+      { t: "quadros", titulo: "Desempenho da equipe", itens: [["Etapas", S.etapas, ""], ["Partidas", S.j, S.wo ? S.wo + " por W.O." : ""], ["Aproveitamento", pct(S.aprov), "vitórias ÷ partidas"], ["Vitórias", S.v, ""], ["Derrotas", S.d, ""],
+        ["Medalhas", S.medalhas.reduce((s2, x) => s2 + x, 0), S.medalhas.map((x, k) => x + " " + ["ouro", "prata", "bronze"][k]).join(" · ")], ["Sets", S.setsV + "–" + S.setsP, S.setsV + S.setsP ? pct(S.setsV / (S.setsV + S.setsP)) + " vencidos" : ""],
+        ["Pontos por partida", med(S.pf, S.jPts), "sofridos: " + med(S.pc, S.jPts)], ["Saldo de pontos", sl(S.pf - S.pc), S.pf + " feitos · " + S.pc + " sofridos"], ["Tiebreaks", S.tb, S.tb ? S.tbV + " vencidos" : ""],
+        ["Vitórias por 2x0", S.v20, ""], ["Derrotas por 0x2", S.d02, ""], ["Maior sequência de vitórias", S.maiorSeqV, ""], ["Maior sequência de derrotas", S.maiorSeqD, ""], ["Sequência atual", seq, ""]] },
+      { t: "tabela", titulo: "Vitórias e derrotas por etapa", cab: ["Etapa", "Data", "J", "V", "D", "Aprov. etapa", "Aprov. acumulado", "Série", "Resultado", "Atletas"], esq: [0, 8],
+        linhas: pe.map(x => [x.nome, C.fmtData(x.data), x.j, x.v, x.d, pct(x.aprovEtapa || 0), pct(x.aprovAcum || 0), x.serie != null ? C.SERIES[x.serie] : "–", (x.medalha ? C.MEDALHA[x.medalha - 1] + " " : "") + (x.texto || "–"), x.nAtletas]) },
+      { t: "barras", titulo: "Aproveitamento por fase", cap: "Vitórias ÷ partidas em cada fase", pos: false, itens: pf.map(x => ({ nome: x.fase, v: x.v / x.j * 100, txt: pct(x.v / x.j), extra: x.v + "V " + x.d + "D" })) },
+      { t: "quadros", titulo: "Adversários", itens: [["Adversários diferentes", adv.length, ""], ["Quem mais vencemos", freg ? freg.v + "x" : "–", freg ? freg.nome : ""], ["Para quem mais perdemos", carr ? carr.d + "x" : "–", carr ? carr.nome : ""]] },
+      { t: "tabela", titulo: "Confronto direto", cab: ["Adversário", "J", "V", "D", "%", "Sets", "Saldo"], linhas: adv.map(a => [a.nome, a.j, a.v, a.d, pct(a.aprov), a.setsV + "–" + a.setsP, sl(a.saldo)]) },
+      { t: "tabela", titulo: "Jogos por adversário", cab: ["Adversário", "Etapa", "Data", "Fase", "Resultado", "Placar", "Sets"], esq: [0, 1, 3],
+        linhas: adv.flatMap(a => a.jogos.map(j => [a.nome, j.etapa, C.fmtData(j.data), j.fase, j.v ? "Vitória" : "Derrota", j.placar, j.parciais || ""])) },
+      { t: "quadros", titulo: "Médias", itens: [["Pontos por set", med(S.pf, S.sets), "sofridos: " + med(S.pc, S.sets)], ["Margem nas vitórias", S.nV ? "+" + C.f1(S.margV / S.nV) : "–", "pontos por partida"], ["Margem nas derrotas", S.nD ? "−" + C.f1(S.margD / S.nD) : "–", "pontos por partida"],
+        ["Partidas por etapa", med(S.j, S.etapas), ""], ["Vitórias por etapa", med(S.v, S.etapas), "derrotas: " + med(S.d, S.etapas)], ["Jogos no tiebreak", S.jPts ? pct(S.tb / S.jPts) : "–", "das partidas"]] },
+      { t: "tabela", titulo: "Medalhas por série", cab: ["Série", "Ouro", "Prata", "Bronze", "Etapas"], linhas: C.SERIES.map((sn, si) => [sn, ...S.porSerie[si], pe.filter(x => x.serie === si).length]) },
+      { t: "barras", titulo: "Atletas por etapa", cap: "Quantos atletas de Mococa jogaram cada etapa", pos: false, itens: pe.map(x => ({ nome: x.nome, sub: C.fmtData(x.data), v: x.nAtletas })) }] };
+    w.insertBefore(botoesRelatorio(rel, { toast, marca: MARCA, X }), w.firstChild);
     return w;
   }
 
