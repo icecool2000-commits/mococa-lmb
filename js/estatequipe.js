@@ -3,6 +3,7 @@
 // A Liga cria um torneio por etapa: em "Todos os torneios" a equipe é reconhecida pelo nome (sem acento/maiúsculas).
 // ctx = { db, fs: { collection, onSnapshot }, esporte, fontes: [[col, rótulo]], marca, toast, render, preferir?: /regex/, torneioAtual?: () => id, X (exportar.js) }
 import * as C from "./torneio-core.js";
+import { resumo as resumoMesa } from "./basquete.js";
 
 function h(tag, props, ...kids) {
   const e = document.createElement(tag);
@@ -26,7 +27,8 @@ const MED = ["🥇", "🥈", "🥉"];
 export function calcular(esporte, dados, chave) {
   const BIR = esporte === "biribol";
   const S = { nome: "", torneios: 0, j: 0, v: 0, d: 0, e: 0, wo: 0, pts: 0, sv: 0, sp: 0, pf: 0, pc: 0, jp: 0, tb: 0, tbV: 0, v20: 0, d02: 0,
-    maiorV: null, piorD: null, jogos: [], fases: {}, adv: {}, etapas: [], atl: {}, medalhas: [0, 0, 0], tecnico: "", capitao: "", cart: { adv: 0, amarelo: 0, vermelho: 0, demora: 0, tec: 0 } };
+    maiorV: null, piorD: null, jogos: [], fases: {}, adv: {}, etapas: [], atl: {}, medalhas: [0, 0, 0], tecnico: "", capitao: "", cart: { adv: 0, amarelo: 0, vermelho: 0, demora: 0, tec: 0 },
+    mesa: { jogos: 0, f: 0, T: 0, U: 0, D: 0, llc: 0, llt: 0, tempos: 0, tec: 0, exc: 0 } };
   const ordemT = [...dados].sort((a, b) => (a.T.criado || 0) - (b.T.criado || 0) || String(a.T.nome).localeCompare(String(b.T.nome)));
   ordemT.forEach(({ T, jogos }) => {
     const eq = (T.equipes || []).find(e => chaveNome(e.nome) === chave); if (!eq) return;
@@ -34,7 +36,7 @@ export function calcular(esporte, dados, chave) {
     const cpA = (eq.atletas || []).find(a => a.id === eq.capitao); if (cpA) S.capitao = cpA.nome;
     const nome = id => ((T.equipes || []).find(e => e.id === id) || {}).nome || "?";
     const meus = new Set((eq.atletas || []).map(a => a.id));
-    (eq.atletas || []).forEach(a => { const k = chaveNome(a.nome); const x = S.atl[k] || (S.atl[k] = { nome: a.nome, num: a.num, j: 0, p: 0, b: 0, as: 0, jEq: 0, am: 0, vm: 0, cap: false }); x.num = a.num ?? x.num; if (eq.capitao === a.id) x.cap = true; });
+    (eq.atletas || []).forEach(a => { const k = chaveNome(a.nome); const x = S.atl[k] || (S.atl[k] = { nome: a.nome, num: a.num, j: 0, p: 0, b: 0, as: 0, jEq: 0, am: 0, vm: 0, cap: false, f: 0, llc: 0, llt: 0 }); x.num = a.num ?? x.num; if (eq.capitao === a.id) x.cap = true; });
     const contaEq = new Set();
     (T.etapas || []).forEach((et, ei) => {
       const js = jogos.filter(j => j.etapa === ei);
@@ -66,6 +68,11 @@ export function calcular(esporte, dados, chave) {
           const a = (eq.atletas || []).find(x => x.id === aid); const x = S.atl[chaveNome(a.nome)];
           x.p += st.p || 0; x.b += st.b || 0; x.as += st.as || 0; if ((st.p || 0) + (st.b || 0) + (st.as || 0) > 0) x.j++;
         });
+        // basquete: mesa (faltas, lances livres, tempos)
+        const MS = !BIR && j.mesa ? resumoMesa(j) : null;
+        if (MS) { const e = MS.eq[lado], M = S.mesa; M.jogos++; M.f += e.f; M.T += e.T; M.U += e.U; M.D += e.D; M.llc += e.llc; M.llt += e.llt; M.tempos += e.tempos; M.tec += e.tecC + e.tecB + e.tecD;
+          Object.entries(MS.atl).forEach(([aid, x]) => { if (!meus.has(aid)) return; const a = (eq.atletas || []).find(y => y.id === aid); const A3 = S.atl[chaveNome(a.nome)];
+            A3.f += x.f || 0; A3.llc += x.llc || 0; A3.llt += x.llt || 0; if (x.fora) M.exc++; }); }
         (j.sancoes || []).forEach(x => { if (x.l !== lado) return;
           if (x.tipo === "advDemora" || x.tipo === "penDemora") S.cart.demora++; else S.cart[x.tipo] = (S.cart[x.tipo] || 0) + 1;
           if (x.quem === "tec" || x.quem === "com") { if (x.tipo === "amarelo" || x.tipo === "vermelho" || x.tipo === "desq") S.cart.tec++; return; }
@@ -102,6 +109,10 @@ export function spec(esporte, S, titulo) {
   quad.push(["Pontos feitos", S.pf, S.jp ? f1(S.pf / S.jp) + " por jogo" : ""], ["Pontos sofridos", S.pc, S.jp ? f1(S.pc / S.jp) + " por jogo" : ""], ["Saldo de pontos", sinal(S.pf - S.pc), ""]);
   if (BIR) quad.push(["Tiebreaks", S.tb, S.tb ? S.tbV + " vencidos" : ""], ["Vitórias por 2x0", S.v20, ""], ["Derrotas por 0x2", S.d02, ""]);
   if (BIR) { const dq = S.cart.desq || 0; quad.push(["Cartões", S.cart.amarelo + S.cart.vermelho + dq, S.cart.amarelo + " amarelo(s) · " + S.cart.vermelho + " vermelho(s) · " + (dq ? dq + " amarelo + vermelho · " : "") + S.cart.adv + " advertência(s)"]); }
+  const M = S.mesa, MM = !BIR && M.jogos > 0;
+  if (MM) quad.push(["Faltas", M.f, f1(M.f / M.jogos) + " por jogo" + (M.T + M.U + M.D ? " · " + [M.T && M.T + " técnica(s)", M.U && M.U + " antidesportiva(s)", M.D && M.D + " desqualificante(s)"].filter(Boolean).join(" · ") : "")],
+    ["Lances livres", M.llc + "/" + M.llt, M.llt ? pct(M.llc / M.llt) + " de aproveitamento" : ""], ["Tempos pedidos", M.tempos, f1(M.tempos / M.jogos) + " por jogo"],
+    ["Técnico/banco", M.tec, "faltas técnicas" + (M.exc ? " · " + M.exc + " atleta(s) fora por 5 faltas/desq." : "")]);
   quad.push(["Medalhas", S.medalhas.reduce((a, b) => a + b, 0), S.medalhas.map((x, k) => x + " " + ["ouro", "prata", "bronze"][k]).join(" · ")],
     ["Maior vitória", S.maiorV ? "+" + S.maiorV.dif : "–", S.maiorV ? S.maiorV.placar + " x " + S.maiorV.adv : ""], ["Pior derrota", S.piorD ? "−" + S.piorD.dif : "–", S.piorD ? S.piorD.placar + " x " + S.piorD.adv : ""],
     ["Maior sequência de vitórias", S.maiorSeqV, ""], ["Sequência atual", S.seq ? S.seq.n + (S.seq.v ? " V" : " D") : "–", ""]);
@@ -115,8 +126,8 @@ export function spec(esporte, S, titulo) {
       linhas: S.etapas.map(l => [l.tnome + " · " + l.enome, l.data ? l.data.split("-").reverse().join("/") : "", l.j, l.v, l.d, ...(BIR && S.pts ? [l.pts] : []), l.pf, l.pc, sinal(l.pf - l.pc), colTxt(l.col)]) },
     { t: "tabela", titulo: "Desempenho por fase", cab: ["Fase", "J", "V", "D", "%", "PF", "PT", "Saldo"], linhas: fases.map(([f, x]) => [f, x.j, x.v, x.d, pct(x.j ? x.v / x.j : 0), x.pf, x.pc, sinal(x.pf - x.pc)]) },
     { t: "tabela", titulo: "Confrontos", cab: ["Adversário", "J", "V", "D", ...(BIR ? ["Sets"] : []), "PF", "PT", "Saldo"], linhas: advs.map(a => [a.nome, a.j, a.v, a.d, ...(BIR ? [a.sv + "–" + a.sp] : []), a.pf, a.pc, sinal(a.pf - a.pc)]) },
-    { t: "tabela", titulo: "Atletas", cab: ["Atleta", "Nº", "Jogos c/ estat.", "Pontos", BIR ? "Bloqueios" : "Tocos", "Assist.", "Média (pts/jogo da equipe)", ...(BIR ? ["Amarelos", "Vermelhos"] : [])],
-      linhas: atl.map(a => [a.nome + (a.cap ? " (C)" : ""), a.num ?? "", a.j, a.p, a.b, a.as, a.jEq ? f1(a.p / a.jEq) : "–", ...(BIR ? [a.am, a.vm] : [])]) },
+    { t: "tabela", titulo: "Atletas", cab: ["Atleta", "Nº", "Jogos c/ estat.", "Pontos", BIR ? "Bloqueios" : "Tocos", "Assist.", "Média (pts/jogo da equipe)", ...(BIR ? ["Amarelos", "Vermelhos"] : []), ...(MM ? ["Faltas", "Lances livres"] : [])],
+      linhas: atl.map(a => [a.nome + (a.cap ? " (C)" : ""), a.num ?? "", a.j, a.p, a.b, a.as, a.jEq ? f1(a.p / a.jEq) : "–", ...(BIR ? [a.am, a.vm] : []), ...(MM ? [a.f, a.llt ? a.llc + "/" + a.llt + " (" + pct(a.llc / a.llt) + ")" : "–"] : [])]) },
     { t: "tabela", titulo: "Jogos", cab: ["Torneio · etapa", "Fase", "Adversário", "Resultado", "Placar", ...(BIR ? ["Sets"] : [])], esq: [0, 2],
       linhas: S.jogos.map(g => [g.tnome + " · " + g.enome, g.fase, g.adv, g.emp ? "Empate" : g.venceu ? "Vitória" : "Derrota", g.placar, ...(BIR ? [g.parciais] : [])]) }
   ] };

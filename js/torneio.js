@@ -6,6 +6,7 @@ import * as X from "./exportar.js";
 import { montarMidias } from "./midias.js";
 import { montarAoVivo } from "./aovivo.js";
 import * as R from "./rodizio.js";
+import * as BQ from "./basquete.js";
 import { montarEstatEquipe, botoesRelatorio } from "./estatequipe.js";
 
 export function montarTorneio(ctx) {
@@ -67,6 +68,7 @@ export function montarTorneio(ctx) {
   let EQ = null;
   if (ctx.statsEquipe) setTimeout(() => { EQ = montarEstatEquipe({ db, fs: ctx.fs, esporte, fontes: [[col, "Este app"]], marca: ctx.marca, toast, render, X, torneioAtual: () => T && T.id, titulo: "Estatísticas por equipe" }); render(); }, 0);
   const ROD = !!ctx.rodizio && esporte === "biribol"; // rodízio dos jogadores na súmula (Liga)
+  const MESA = !!ctx.mesaBasquete && esporte !== "biribol"; // mesa do basquete: quinteto, faltas, lances livres, tempos, posse (FIBA)
   C.definirRegra({ pontosSets: !!ctx.pontosSets });
   const LIGA_CART = !!ctx.cartoesLiga; // cartões pela regra da Liga (amarelo = ponto; vermelho = fora do set; amarelo+vermelho = fora da etapa)
   R.definirRegraCartoes(LIGA_CART ? "liga" : "cnbi");
@@ -211,7 +213,7 @@ export function montarTorneio(ctx) {
   async function criarDemo() {
     const id = "demo-" + Date.now().toString(36);
     try {
-      const { torneio, jogos: js } = gerarDemo(esporte, ctx.nomeDemo, { series: SERIES_OK, casa: casa(), cartoesLiga: LIGA_CART });
+      const { torneio, jogos: js } = gerarDemo(esporte, ctx.nomeDemo, { series: SERIES_OK, casa: casa(), cartoesLiga: LIGA_CART, mesa: MESA });
       const b = writeBatch(db);
       b.set(doc(db, col, id), torneio);
       js.forEach(({ id: jid, ...d }) => b.set(doc(db, col, id, "jogos", jid), d));
@@ -791,7 +793,7 @@ export function montarTorneio(ctx) {
   }
 
   /* ---------- súmula ---------- */
-  function abrirSumula(jid) { sumulaJid = jid; sumulaLocal = JSON.parse(JSON.stringify(jogos.find(j => j.id === jid))); modoCorrigir = false; render(); }
+  function abrirSumula(jid) { sumulaJid = jid; sumulaLocal = JSON.parse(JSON.stringify(jogos.find(j => j.id === jid))); modoCorrigir = false; periodoSel = (sumulaLocal && sumulaLocal.mesa && sumulaLocal.mesa.q) || null; render(); }
   let modoCorrigir = false, ladoSel = "a", somaPlacar = true, periodoSel = null, cron = { rest: 600, rodando: false, t: null };
 
   function salvarSumula(imediato) {
@@ -810,7 +812,7 @@ export function montarTorneio(ctx) {
     const j = sumulaLocal; if (!j) { sumulaJid = null; return null; }
     const ed = podeEditar() && j.a && j.b, r = res(j), fim = j.status === "encerrado";
     const et = T.etapas[j.etapa] || {};
-    const fechar = () => { if (salvarTimer) salvarSumula(true); sumulaJid = null; sumulaLocal = null; pararCron(); render(); };
+    const fechar = () => { if (salvarTimer) salvarSumula(true); sumulaJid = null; sumulaLocal = null; pararCron(); BQ.pararTudo(); render(); };
     const painel = h("div", { class: "t-sumula", role: "dialog", "aria-label": "Súmula do jogo" });
     painel.append(h("div", { class: "t-sum-topo" },
       h("button", { type: "button", class: "ghost t-mini", onclick: fechar }, "← Voltar"),
@@ -831,6 +833,12 @@ export function montarTorneio(ctx) {
     if (ROD && j.a && j.b && !j.wo && (ed || (j.sancoes || []).length)) painel.append(R.painelDisciplina({ h, j, nomeA: eqNome(j.a), nomeB: eqNome(j.b), ed, fim, toast, render,
       atletas: { a: ((eqDe(j.a) || {}).atletas || []), b: ((eqDe(j.b) || {}).atletas || []) }, capitaes: { a: (eqDe(j.a) || {}).capitao || null, b: (eqDe(j.b) || {}).capitao || null }, tecnicos: { a: (eqDe(j.a) || {}).tecnico || "", b: (eqDe(j.b) || {}).tecnico || "" },
       salvar: () => { if (j.status === "agendado") j.status = "andamento"; salvarSumula(true); }, ponto: (l, d) => pontoEquipe(l, d) }));
+    // mesa do basquete (quinteto, faltas, lances livres, tempos, posse alternada, relógios) logo abaixo do placar
+    if (MESA && j.a && j.b && !j.wo && (ed || j.mesa)) painel.append(BQ.painel({ h, j, ed, fim, nomeA: eqNome(j.a), nomeB: eqNome(j.b), toast, render,
+      atletas: { a: ((eqDe(j.a) || {}).atletas || []), b: ((eqDe(j.b) || {}).atletas || []) }, capitaes: { a: (eqDe(j.a) || {}).capitao || null, b: (eqDe(j.b) || {}).capitao || null }, tecnicos: { a: (eqDe(j.a) || {}).tecnico || "", b: (eqDe(j.b) || {}).tecnico || "" },
+      salvar: () => { if (j.status === "agendado") j.status = "andamento"; salvarSumula(true); }, pontoAtleta: (aid, d) => pontoAtleta(aid, d),
+      cron: { get rest() { return cron.rest; }, get rodando() { return cron.rodando; }, iniciar: iniciarCron, parar: pararCron, definir: seg => { cron.rest = seg; } },
+      irPeriodo: (n, criar) => { if (criar && !j.periodos.some(p => p.n === n)) j.periodos.push({ n, a: 0, b: 0 }); periodoSel = n; } }));
     if (fim && !j.wo) painel.append(h("div", { class: "t-linha t-sum-exp" }, h("span", { class: "cap", text: "Gerar súmula:" }),
       h("button", { type: "button", class: "ghost t-mini", onclick: () => gerarSumula(j, "pdf") }, "PDF"), h("button", { type: "button", class: "ghost t-mini", onclick: () => gerarSumula(j, "xlsx") }, "Excel")));
     BIR ? sumulaBiribol(painel, j, ed, fim) : sumulaBasquete(painel, j, ed, fim);
@@ -855,7 +863,7 @@ export function montarTorneio(ctx) {
       const btn = (rot, fn, cls) => h("button", { type: "button", class: "t-sb " + (cls || ""), disabled: !ed || fim, onclick: fn }, modoCorrigir ? rot.replace("+", "−") : rot);
       lista.append(h("div", { class: "t-sa" },
         h("div", { class: "t-sanome" }, h("span", { class: "t-camisa", text: a.num ?? "–" }), h("span", { text: a.nome }), eq.capitao === a.id && h("span", { class: "t-capbadge", title: "Capitão", text: "C" }),
-          cartoes(a.id).map(t => h("span", { class: "t-cartao " + t, title: TIT_C[t] })),
+          cartoes(a.id).map(t => h("span", { class: "t-cartao " + t, title: TIT_C[t] })), MESA && j.mesa && BQ.marcadorFaltas(h, j, a.id),
           LIGA_CART && (R.desqualificadoFora(a.id) || (j.sancoes || []).some(x => x.tipo === "desq" && x.quem === a.id)) && h("span", { class: "t-fora", title: "Amarelo + vermelho juntos: só volta na próxima etapa", text: "fora da etapa" })),
         h("div", { class: "t-sanum" }, h("span", null, h("b", { text: s.p }), " pts"), h("span", null, h("b", { text: s.b }), BIR ? " blq" : " toco"), h("span", null, h("b", { text: s.as }), " ast")),
         ed && !fim && h("div", { class: "t-sabtns" },
@@ -893,6 +901,14 @@ export function montarTorneio(ctx) {
     salvarSumula();
   }
 
+  // ponto de atleta com valor explícito (mesa do basquete: cesta + 1, lance livre, desfazer)
+  function pontoAtleta(aid, d) {
+    const j = sumulaLocal, a = atletaDe(aid); if (!a) { salvarSumula(true); return; }
+    const lado = a.eid === j.a ? "a" : "b", s = j.stats[aid] || (j.stats[aid] = { p: 0, b: 0, as: 0 });
+    if (s.p + d < 0 || !pontoEquipe(lado, d, true)) { salvarSumula(true); return; }
+    s.p += d; if (j.status === "agendado") j.status = "andamento";
+    salvarSumula(true);
+  }
   // soma/subtrai pontos da equipe no set/período atual; retorna false se não pode
   function pontoEquipe(lado, d, semSalvar) {
     const j = sumulaLocal;
@@ -945,7 +961,7 @@ export function montarTorneio(ctx) {
       h("small", { text: nomeP(p.n) }), h("b", { text: p.a + " - " + p.b })))));
     if (ed && !fim) {
       const p = j.periodos.find(x => x.n === sel);
-      painel.append(h("div", { class: "t-cron" },
+      if (!(MESA && j.mesa)) painel.append(h("div", { class: "t-cron" },
         h("b", { id: "t-cron-v", text: pad(Math.floor(cron.rest / 60)) + ":" + pad(cron.rest % 60) }),
         h("button", { type: "button", class: "ghost t-mini", onclick: () => cron.rodando ? pararCron() : iniciarCron() }, cron.rodando ? "Pausar" : "Iniciar"),
         h("button", { type: "button", class: "ghost t-mini", onclick: () => { pararCron(); cron.rest = /^P/.test(sel) ? 300 : 600; render(); } }, "Zerar")));
@@ -968,7 +984,7 @@ export function montarTorneio(ctx) {
     const r = C.resultadoBasquete({ ...j, status: "encerrado" });
     if (r.empate && j.fase === "mata") { toast("Empate no mata-mata: use prorrogação ou bola de ouro."); return; }
     perguntar(r.empate ? "Encerrar com empate (" + r.pa + " x " + r.pb + ")?" : "Encerrar o jogo com vitória de " + eqNome(r.venc) + " (" + r.pa + " x " + r.pb + ")?", () => {
-      j.status = "encerrado"; j.venc = r.venc; pararCron(); salvarSumula(true);
+      j.status = "encerrado"; j.venc = r.venc; pararCron(); BQ.pararTudo(); salvarSumula(true);
     }, "Encerrar");
   }
 
@@ -1066,6 +1082,7 @@ export function montarTorneio(ctx) {
     relBar("10 maiores pontuadores", "Geral do filtro escolhido", top10.map(lin)); relBar("10 menores pontuadores", "Entre atletas de equipes que jogaram", bot10.map(lin));
     w.append(h("div", { class: "card" }, h("h3", { text: "10 maiores pontuadores" }), h("p", { class: "cap", text: "Geral do filtro escolhido" }), barrasH(top10.map((a, i) => ({ ...lin(a), hi: i === 0 && a.p > 0 })), "Sem dados ainda.")));
     w.append(h("div", { class: "card" }, h("h3", { text: "10 menores pontuadores" }), h("p", { class: "cap", text: "Entre atletas de equipes que jogaram" }), barrasH(bot10.map(lin), "Sem dados ainda.", true)));
+    if (!BIR) statsMesa(w, rel, js, todosAtl, relBar);
     // pontos das equipes por fase
     const fasesTab = [...new Set(js.map(faseDe))].sort((a, b) => ordemF.indexOf(a) - ordemF.indexOf(b));
     const pts = {}; T.equipes.forEach(e => pts[e.id] = { geral: { pf: 0, pc: 0 } });
@@ -1130,6 +1147,41 @@ export function montarTorneio(ctx) {
     return w;
   }
 
+  // basquete: faltas, lances livres, tempos, exclusões e desqualificações (vem da mesa de cada jogo)
+  function statsMesa(w, rel, js, todosAtl, relBar) {
+    const rs = js.map(j => [j, BQ.resumo(j)]).filter(x => x[1]);
+    if (!rs.length) return;
+    const A = {}, E = {}, ocorr = [], f1 = v => (Math.round(v * 10) / 10).toFixed(1).replace(".", ","), pct = (c, t) => t ? Math.round(100 * c / t) + "%" : "–";
+    rs.forEach(([j, r]) => {
+      Object.entries(r.atl).forEach(([aid, x]) => { const y = A[aid] || (A[aid] = { f: 0, T: 0, U: 0, D: 0, llc: 0, llt: 0, exc: 0, desq: 0, jm: 0 }); y.jm++;
+        y.f += x.f || 0; y.T += x.T || 0; y.U += x.U || 0; y.D += x.D || 0; y.llc += x.llc || 0; y.llt += x.llt || 0;
+        if (x.fora) { x.fora === "5 faltas" ? y.exc++ : y.desq++; const a = todosAtl.find(t => t.id === aid); ocorr.push([x.fora === "5 faltas" ? "5 faltas" : "Desqualificado", a ? (a.num != null ? "nº " + a.num + " " : "") + a.nome : "?", a ? a.enome : "", j.faseNome || ""]); } });
+      ["a", "b"].forEach(l => { const e = r.eq[l], y = E[j[l]] || (E[j[l]] = { jogos: 0, f: 0, T: 0, U: 0, D: 0, llc: 0, llt: 0, tempos: 0, tec: 0 });
+        y.jogos++; y.f += e.f; y.T += e.T; y.U += e.U; y.D += e.D; y.llc += e.llc; y.llt += e.llt; y.tempos += e.tempos; y.tec += e.tecC + e.tecB + e.tecD;
+        if (e.tecFora) ocorr.push(["Técnico desqualificado", (eqDe(j[l]) || {}).tecnico || "Técnico", eqNome(j[l]), j.faseNome || ""]); });
+    });
+    const linE = Object.entries(E).map(([eid, y]) => ({ nome: eqNome(eid), ...y })).sort((x, y) => y.f / y.jogos - x.f / x.jogos || x.nome.localeCompare(y.nome, "pt-BR"));
+    const cab = ["Equipe", "Jogos", "Faltas", "Por jogo", "Técn.", "Antidesp.", "Desq.", "Técnico/banco", "Lances livres", "Aprov.", "Tempos"];
+    const linhas = linE.map(y => [y.nome, y.jogos, y.f, f1(y.f / y.jogos), y.T, y.U, y.D, y.tec, y.llc + "/" + y.llt, pct(y.llc, y.llt), y.tempos]);
+    w.append(h("div", { class: "card" }, h("h3", { text: "Faltas, lances livres e tempos por equipe" }), h("p", { class: "cap", text: "Da mesa de " + rs.length + " jogo(s) · técnicas do técnico e do banco ficam à parte (não são faltas de equipe)" }),
+      h("div", { class: "tablebox" }, h("table", { class: "t-tab" }, h("thead", null, h("tr", null, cab.map((c, i) => h("th", { class: i ? null : "l", text: c })))),
+        h("tbody", null, linhas.map(l => h("tr", null, l.map((v, i) => h("td", { class: i ? null : "l", text: v })))))))));
+    rel.blocos.push({ t: "tabela", titulo: "Faltas, lances livres e tempos por equipe", cab, linhas });
+    const at = id => todosAtl.find(t => t.id === id) || { nome: "?", enome: "" };
+    const faltosos = Object.entries(A).filter(([, y]) => y.f).map(([id, y]) => ({ nome: at(id).nome, sub: at(id).enome, v: y.f, extra: [y.T && y.T + " técn.", y.U && y.U + " antid.", y.D && y.D + " desq.", y.exc && y.exc + "× 5 faltas"].filter(Boolean).join(" · ") }))
+      .sort((x, y) => y.v - x.v || x.nome.localeCompare(y.nome, "pt-BR")).slice(0, 10);
+    const llOrd = Object.entries(A).filter(([, y]) => y.llt >= 4).map(([id, y]) => ({ nome: at(id).nome, sub: at(id).enome, v: Math.round(100 * y.llc / y.llt), fmt: pct(y.llc, y.llt), extra: y.llc + "/" + y.llt + " lances livres" }))
+      .sort((x, y) => y.v - x.v || x.nome.localeCompare(y.nome, "pt-BR")).slice(0, 10);
+    w.append(h("div", { class: "card" }, h("h3", { text: "Atletas com mais faltas" }), h("p", { class: "cap", text: "Total de faltas (pessoais, ofensivas, técnicas, antidesportivas e desqualificantes)" }), barrasH(faltosos.map((x, i) => ({ ...x, hi: i === 0 })), "Nenhuma falta registrada.", false, false)));
+    w.append(h("div", { class: "card" }, h("h3", { text: "Aproveitamento nos lances livres" }), h("p", { class: "cap", text: "Atletas com pelo menos 4 tentativas" }), barrasH(llOrd.map((x, i) => ({ ...x, hi: i === 0 })), "Ainda não há atletas com 4 lances livres.")));
+    relBar("Atletas com mais faltas", "Total de faltas", faltosos); relBar("Aproveitamento nos lances livres", "Pelo menos 4 tentativas", llOrd);
+    if (ocorr.length) {
+      w.append(h("div", { class: "card" }, h("h3", { text: "Exclusões e desqualificações" }),
+        h("div", { class: "tablebox" }, h("table", { class: "t-tab" }, h("thead", null, h("tr", null, ["Ocorrência", "Quem", "Equipe", "Fase"].map(c => h("th", { class: "l", text: c })))),
+          h("tbody", null, ocorr.map(l => h("tr", null, l.map((v, i) => h("td", { class: "l" + (i === 0 && v !== "5 faltas" ? " t-vm" : ""), text: v })))))))));
+      rel.blocos.push({ t: "tabela", titulo: "Exclusões e desqualificações", cab: ["Ocorrência", "Quem", "Equipe", "Fase"], esq: [0, 1, 2, 3], linhas: ocorr });
+    }
+  }
   function barrasH(itens, vazio, inverso, decimal, semPos) {
     const box = h("div", { class: "hbars" });
     if (!itens.length) { box.append(h("p", { class: "cap", text: vazio })); return box; }

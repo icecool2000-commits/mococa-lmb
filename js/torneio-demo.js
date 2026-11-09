@@ -96,6 +96,46 @@ export function gerarDemo(esporte, nomeDemo, opts = {}) {
     const st = {}; distribuir(eqDe(j.a), A, st, [1, 2, 2, 2, 3]); distribuir(eqDe(j.b), B, st, [1, 2, 2, 2, 3]);
     extrasStats(j, st); j.stats = st;
     j.venc = C.resultadoBasquete(j).venc;
+    if (opts.mesa) mesaBasquete(j, st);
+  }
+
+  // mesa do basquete (regras FIBA): titulares, substituições, faltas por quarto com penalidade, lances livres, tempos e posse
+  function mesaBasquete(j, st) {
+    const ats = { a: eqDe(j.a).atletas.map(a => a.id), b: eqDe(j.b).atletas.map(a => a.id) };
+    const ini = { a: ats.a.slice(0, 5), b: ats.b.slice(0, 5) }, quadra = { a: [...ini.a], b: [...ini.b] };
+    const salto = R() < 0.5 ? "a" : "b", ev = [], F = {}, llUsado = {}, pick = arr => arr[int(0, arr.length - 1)];
+    const fora = id => { const x = F[id]; return x && (x.n >= 5 || x.D || x.T + x.U >= 2); };
+    const qs = j.periodos.map(p => p.n).filter(n => n !== "BO");
+    let seta = salto === "a" ? "b" : "a";
+    qs.forEach(q => {
+      if (q !== "1Q") { ev.push({ t: "pos", l: seta, q }); seta = seta === "a" ? "b" : "a"; }
+      const eqF = { a: 0, b: 0 }, ot = /^P/.test(q);
+      if (q === "4Q" || ot) ["a", "b"].forEach(l => eqF[l] = ev.filter(e => e.t === "f" && e.l === l && (e.q === "4Q" || /^P/.test(e.q)) && e.quem !== "tec").length);
+      const lances = [];
+      ["a", "b"].forEach(l => { const n = ot ? int(1, 3) : int(3, 6); for (let i = 0; i < n; i++) lances.push(["f", l]); const tos = ot ? (R() < 0.4 ? 1 : 0) : q === "1Q" || q === "3Q" ? int(0, 1) : int(0, q === "4Q" ? 2 : 1); for (let i = 0; i < tos; i++) lances.push(["to", l]); if (!ot && R() < 0.6) lances.push(["s", l]); });
+      lances.sort(() => R() - 0.5);
+      lances.forEach(([t, l]) => {
+        const op = l === "a" ? "b" : "a";
+        if (t === "to") { const usados = ev.filter(e => e.t === "to" && e.l === l && (ot ? e.q === q : (q < "3Q" ? e.q < "3Q" : e.q >= "3Q" && !/^P/.test(e.q)))).length; if (usados < (ot ? 1 : q < "3Q" ? 2 : 3)) ev.push({ t: "to", l, q, u2: false }); return; }
+        if (t === "s") { const banco = ats[l].filter(id => !quadra[l].includes(id) && !fora(id)); if (!banco.length) return; const k = int(0, 4), sai = quadra[l][k], entra = pick(banco); quadra[l][k] = entra; ev.push({ t: "s", l, sai, entra, q }); return; }
+        // falta
+        if (R() < 0.04) { ev.push({ t: "f", l, quem: "tec", tipo: R() < 0.7 ? "C" : "B", arr: 0, conv: false, q, ll: 1, sofreu: quadra[op][0] }); llLances(op, quadra[op][0], 1, q); return; }
+        const quem = pick(quadra[l].filter(id => !fora(id)).concat(quadra[l]).slice(0, 5)); if (fora(quem)) return;
+        const x = R(), tipo = x < 0.84 ? "P" : x < 0.92 ? "O" : x < 0.96 ? "T" : x < 0.995 ? "U" : "D";
+        let arr = 0, conv = false;
+        if ((tipo === "P" || tipo === "U") && R() < 0.38) { const y = R(); arr = y < 0.12 ? 3 : 2; conv = y > 0.8; }
+        const pen = eqF[l] >= 4;
+        const ll = tipo === "O" ? 0 : tipo === "T" ? 1 : tipo === "U" || tipo === "D" ? (arr ? (conv ? 1 : arr) : 2) : arr ? (conv ? 1 : arr) : pen ? 2 : 0;
+        const sofreu = pick(quadra[op]);
+        const fx = F[quem] || (F[quem] = { n: 0, T: 0, U: 0, D: 0 }); fx.n++; if (fx[tipo] != null) fx[tipo]++;
+        eqF[l]++;
+        ev.push({ t: "f", l, quem, tipo, arr, conv, q, ll, sofreu: ll || conv ? sofreu : null, ...(conv ? { pts: arr } : {}) });
+        if (ll) llLances(op, sofreu, ll, q);
+        if (fora(quem)) { const banco = ats[l].filter(id => !quadra[l].includes(id) && !fora(id)); if (banco.length) { const entra = pick(banco); quadra[l][quadra[l].indexOf(quem)] = entra; ev.push({ t: "s", l, sai: quem, entra, q }); } }
+      });
+    });
+    function llLances(l, aid, n, q) { for (let i = 0; i < n; i++) { const pode = (st[aid] ? st[aid].p : 0) - (llUsado[aid] || 0) > 0, ok = pode && R() < 0.72; if (ok) llUsado[aid] = (llUsado[aid] || 0) + 1; ev.push({ t: "ll", l, aid, ok, q }); } }
+    j.mesa = { q: qs[qs.length - 1] || "4Q", ini, salto, ev, pend: null };
   }
 
   function extrasStats(j, st) {

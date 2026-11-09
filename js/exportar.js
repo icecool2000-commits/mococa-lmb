@@ -1,6 +1,7 @@
 // Exportações do torneio: tabela de jogos (para imprimir/preencher) e relatório completo,
 // em PDF (jsPDF + AutoTable) e Excel estilizado (ExcelJS). Bibliotecas carregadas só quando usadas.
 import * as C from "./torneio-core.js";
+import { resumo as resumoMesa } from "./basquete.js";
 const PTS = () => C.REGRA.pontosSets;
 
 const LIBS = {
@@ -747,10 +748,12 @@ async function salvarXL(wb, nome) {
 function dadosSumula(T, j, esporte) {
   const BIR = esporte === "biribol", r = C.resultado(esporte, j), et = (T.etapas || [])[j.etapa] || {};
   const eq = id => (T.equipes || []).find(e => e.id === id) || { nome: "?", atletas: [] };
+  const MS = !BIR && j.mesa ? resumoMesa(j) : null;
   const lados = ["a", "b"].map(l => {
     const e = eq(j[l]), ats = [...(e.atletas || [])].sort((x, y) => (x.num ?? 999) - (y.num ?? 999));
     const cart = aid => (j.sancoes || []).filter(x => x.l === l && x.quem === aid && (x.tipo === "amarelo" || x.tipo === "vermelho" || x.tipo === "desq")).map(x => x.tipo === "amarelo" ? "Amarelo" : x.tipo === "desq" ? "Amarelo + Vermelho (fora da etapa)" : "Vermelho").join(" + ");
-    const linhas = ats.map(a => { const s = (j.stats || {})[a.id] || {}; return { num: a.num ?? "", nome: a.nome + (e.capitao === a.id ? " (C)" : ""), p: s.p || 0, b: s.b || 0, as: s.as || 0, cart: cart(a.id) }; });
+    const ma = id => (MS && MS.atl[id]) || {}, fTxt = x => x.f ? x.f + (x.T || x.U || x.D ? " (" + [x.T && x.T + "T", x.U && x.U + "U", x.D && "D"].filter(Boolean).join(" ") + ")" : "") + (x.fora === "5 faltas" ? " · fora" : x.fora ? " · desq." : "") : "0";
+    const linhas = ats.map(a => { const s = (j.stats || {})[a.id] || {}, x = ma(a.id); return { num: a.num ?? "", nome: a.nome + (e.capitao === a.id ? " (C)" : ""), p: s.p || 0, b: s.b || 0, as: s.as || 0, cart: cart(a.id), f: fTxt(x), ll: x.llt ? x.llc + "/" + x.llt : "–" }; });
     const tot = linhas.reduce((t, x) => ({ p: t.p + x.p, b: t.b + x.b, as: t.as + x.as }), { p: 0, b: 0, as: 0 });
     const cp = (e.atletas || []).find(a => a.id === e.capitao);
     return { nome: e.nome, linhas, tot, venceu: r.venc === j[l], tecnico: e.tecnico || "", capitao: cp ? "nº " + (cp.num ?? "–") + " " + cp.nome : "" };
@@ -768,7 +771,10 @@ function dadosSumula(T, j, esporte) {
   const sancoes = (j.sancoes || []).filter(x => ROT[x.tipo]).map(x => [rotS(x), eq(j[x.l]).nome, quem(x), x.set < 2 ? (x.set + 1) + "º set" : "Tiebreak", x.placar || ""]);
   const incompleta = j.incompleta ? eq(j[j.incompleta]).nome + " declarada incompleta (regra 23.3)" : "";
   const temCart = lados.some(l => l.linhas.some(x => x.cart));
-  return { BIR, et, lados, parciais, placar, sancoes, incompleta, temCart, resultado, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };
+  // mesa do basquete: faltas de equipe por quarto (prorrogação = 4º), tempos, técnico, lances livres
+  const mesa = MS ? ["a", "b"].map(l => { const e = MS.eq[l]; return [eq(j[l]).nome, e.porQ["1Q"] || 0, e.porQ["2Q"] || 0, e.porQ["3Q"] || 0, e.porQ["4Q"] || 0, e.f, e.tempos,
+    [e.tecC && e.tecC + " C", e.tecB && e.tecB + " B", e.tecD && "D"].filter(Boolean).join(" ") + (e.tecFora ? " (desq.)" : "") || "0", e.llc + "/" + e.llt]; }) : null;
+  return { BIR, et, lados, parciais, placar, sancoes, incompleta, temCart, mesa, resultado, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };
 }
 const nomeSumula = (T, j, D, ext) => arquivo(T, "sumula-" + (D.lados[0].nome + "-x-" + D.lados[1].nome).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase() + "." + ext);
 
@@ -795,11 +801,16 @@ export async function sumulaPDF(T, j, esporte, marca) {
   D.lados.forEach(l => {
     y = secao(doc, y, "Atletas – " + l.nome, logo);
     if (l.tecnico || l.capitao) { doc.setFontSize(8.5); doc.setTextColor("#444"); doc.text([l.tecnico && "Técnico: " + l.tecnico, l.capitao && "Capitão: " + l.capitao].filter(Boolean).join("   ·   "), 10, y); doc.setTextColor("#1a1a1a"); y += 4; }
-    const cc = D.temCart, body = l.linhas.length ? l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as, ...(cc ? [x.cart] : [])]) : [["", "(atletas não cadastrados)", "", "", "", ...(cc ? [""] : [])]];
-    y = tabela(doc, y, { head: [["Nº", "Atleta", "Pontos", lbl, "Assist.", ...(cc ? ["Cartões"] : [])]], body: [...body, ["", "Total", l.tot.p, l.tot.b, l.tot.as, ...(cc ? [""] : [])]],
+    const cc = D.temCart, mm = !!D.mesa, body = l.linhas.length ? l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as, ...(mm ? [x.f, x.ll] : []), ...(cc ? [x.cart] : [])]) : [["", "(atletas não cadastrados)", "", "", "", ...(mm ? ["", ""] : []), ...(cc ? [""] : [])]];
+    y = tabela(doc, y, { head: [["Nº", "Atleta", "Pontos", lbl, "Assist.", ...(mm ? ["Faltas", "Lances livres"] : []), ...(cc ? ["Cartões"] : [])]], body: [...body, ["", "Total", l.tot.p, l.tot.b, l.tot.as, ...(mm ? ["", ""] : []), ...(cc ? [""] : [])]],
       styles: { halign: "center", fontSize: 8.5, cellPadding: 1.1 }, columnStyles: { 0: { cellWidth: 14 }, 1: { halign: "left" } },
       didParseCell: d => { if (d.section === "body" && d.row.index === body.length) { d.cell.styles.fontStyle = "bold"; d.cell.styles.fillColor = "#e6f2fb"; } } }, logo);
   });
+  if (D.mesa) {
+    y = secao(doc, y, "Faltas de equipe por quarto, tempos e técnico", logo);
+    y = tabela(doc, y, { head: [["Equipe", "1º Q", "2º Q", "3º Q", "4º Q + prorr.", "Faltas", "Tempos", "Técnico/banco", "Lances livres"]], body: D.mesa, styles: { halign: "center", fontSize: 8.5, cellPadding: 1.1 }, columnStyles: { 0: { halign: "left" } } }, logo);
+    doc.setFontSize(7.5); doc.setTextColor("#666"); doc.text("Faltas: T = técnica, U = antidesportiva, D = desqualificante. Técnico: C = técnica do técnico, B = técnica do banco. A partir da 5ª falta de equipe no quarto: penalidade.", 10, y - 2, { maxWidth: W - 20 }); doc.setTextColor("#1a1a1a"); y += 5;
+  }
   if (D.sancoes.length || D.incompleta) {
     y = secao(doc, y, "Sanções", logo);
     y = tabela(doc, y, { head: [["Sanção", "Equipe", "Quem", "Set", "Placar"]], body: [...D.sancoes, ...(D.incompleta ? [[D.incompleta, "", "", "", ""]] : [])], styles: { fontSize: 8.5, cellPadding: 1.1 } }, logo);
@@ -825,9 +836,10 @@ export async function sumulaXLSX(T, j, esporte, marca) {
   const lbl = D.BIR ? "Bloqueios" : "Tocos";
   D.lados.forEach(l => {
     tituloSecao(ws, "Atletas – " + l.nome + (l.tecnico ? " · Técnico: " + l.tecnico : "") + (l.capitao ? " · Capitão: " + l.capitao : ""), E);
-    const cc = D.temCart;
-    tabelaXL(ws, ["Nº", "Atleta", "Pontos", lbl, "Assist.", ...(cc ? ["Cartões"] : [])], [...l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as, ...(cc ? [x.cart] : [])]), ["", "Total", l.tot.p, l.tot.b, l.tot.as, ...(cc ? [""] : [])]], E, { esq: [1], negrito: [2], destaque: i => i === l.linhas.length });
+    const cc = D.temCart, mm = !!D.mesa;
+    tabelaXL(ws, ["Nº", "Atleta", "Pontos", lbl, "Assist.", ...(mm ? ["Faltas", "Lances livres"] : []), ...(cc ? ["Cartões"] : [])], [...l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as, ...(mm ? [x.f, x.ll] : []), ...(cc ? [x.cart] : [])]), ["", "Total", l.tot.p, l.tot.b, l.tot.as, ...(mm ? ["", ""] : []), ...(cc ? [""] : [])]], E, { esq: [1], negrito: [2], destaque: i => i === l.linhas.length });
   });
+  if (D.mesa) { tituloSecao(ws, "Faltas de equipe por quarto, tempos e técnico", E); tabelaXL(ws, ["Equipe", "1º Q", "2º Q", "3º Q", "4º Q + prorr.", "Faltas", "Tempos", "Técnico/banco", "Lances livres"], D.mesa, E, { esq: [0] }); }
   if (D.sancoes.length || D.incompleta) { tituloSecao(ws, "Sanções", E); tabelaXL(ws, ["Sanção", "Equipe", "Quem", "Set", "Placar"], [...D.sancoes, ...(D.incompleta ? [[D.incompleta, "", "", "", ""]] : [])], E, { esq: [0, 1, 2] }); }
   if (D.destaque) { tituloSecao(ws, (D.BIR ? "Maior pontuador: " : "Cestinha: ") + D.destaque.nome + " (" + D.destaque.eq + ") – " + D.destaque.p + " pontos", E); ws.__linha++; }
   tituloSecao(ws, "Assinaturas", E);
