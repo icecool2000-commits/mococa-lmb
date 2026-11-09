@@ -60,7 +60,7 @@ const SIM_AZUL = [["4", "Marcos"], ["3", "Paulo"], ["1", "Diego"], ["2", "Rafael
 const SIM_VERM = [["3", "André"], ["4", "Felipe"], ["2", "Gustavo"], ["1", "Renato"], ["5", "Vitor"], ["6", "Igor"], ["7", "Murilo"], ["8", "Otávio"]];
 export function novaSim() {
   const atl = {}, el = { a: [], b: [] };
-  [["a", SIM_AZUL], ["b", SIM_VERM]].forEach(([l, lista]) => lista.forEach(([n, nome]) => { const id = "sim-" + l + n; atl[id] = { nome, num: Number(n) }; el[l].push(id); }));
+  [["a", SIM_AZUL], ["b", SIM_VERM]].forEach(([l, lista]) => lista.forEach(([n, nome]) => { const id = "sim-" + l + n; atl[id] = { nome, num: Number(n), ...(n === (l === "a" ? "4" : "3") ? { cap: true } : {}) }; el[l].push(id); }));
   // formação igual à ilustração: azul 4 no saque, 3 fundo, 1 rede esq., 2 rede dir.; vermelha 3 no saque, 4 fundo, 2 rede esq., 1 rede dir.
   return { id: "sim", a: "A", b: "B", status: "andamento", sets: [{ a: 0, b: 0 }],
     rodizio: { toucaA: "azul", atl, elenco: el, sets: [{ ladoA: "esq", saque: "a", pos: { a: el.a.slice(0, 4), b: el.b.slice(0, 4) }, ev: [] }] } };

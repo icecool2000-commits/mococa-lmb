@@ -16,7 +16,8 @@ export function montarApp(ctx) {
   const podeEditar = () => ctx.podeEditar();
   const ls = { get(k) { try { return localStorage.getItem("mococa-" + k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem("mococa-" + k, v); } catch (e) {} } };
 
-  let atletas = [], etapas = [], confs = {}, carregou = { at: false, et: false };
+  let atletas = [], etapas = [], confs = {}, carregou = { at: false, et: false }, comissao = {};
+  const COMISSAO = "_comissao"; // doc especial em mococa_atletas: { comissao: true, tecnico }
   let aba = ls.get("aba") || "historia", temp = ls.get("temp") || "todas", atlSel = null, advSel = null;
   let edEtapa = null, edPartida = null, pergunta = null, ocupado = false, imp = null;
   const subsConf = {};
@@ -30,7 +31,7 @@ export function montarApp(ctx) {
     rodizio: true,
     aoVivo: { app: "mococa", canal: { id: "UC8NzFZxYbM-XXdNFXOEk6vw", handle: "ligametropolitanadebiribol" }, canalDe: "lmb", instagram: "biribol_mococa" },
     midias: { app: "mococa", perfis: [{ usuario: "biribol_mococa", nome: "Biribol Mococa" }], hashtags: "#biribol #biribolmococa #ligametropolitana" },
-    equipeCasa: () => ({ nome: CASA, atletas: [...ativos()].sort((a, b) => (a.num ?? 999) - (b.num ?? 999)) }),
+    equipeCasa: () => ({ nome: CASA, atletas: [...ativos()].sort((a, b) => (a.num ?? 999) - (b.num ?? 999)), capitao: (ativos().find(a => a.capitao) || {}).id || null, tecnico: comissao.tecnico || "" }),
     marca: MARCA });
   // Estatísticas por Equipe: qualquer equipe dos torneios da Liga ou da aba Torneios
   const EQ = montarEstatEquipe({ db, fs: { collection, onSnapshot }, esporte: "biribol", fontes: [["lmb_torneios", "App da Liga"], ["mococa_torneios", "Torneios deste app"]],
@@ -72,7 +73,7 @@ export function montarApp(ctx) {
   /* ---------- dados ---------- */
   let erroLeitura = null;
   const falhou = (k, e) => { console.error(e); erroLeitura = (e && e.code) || "erro"; carregou[k] = true; render(); };
-  onSnapshot(collection(db, COL_AT), s => { atletas = s.docs.map(d => ({ id: d.id, ...d.data() })); carregou.at = true; erroLeitura = null; render(); }, e => falhou("at", e));
+  onSnapshot(collection(db, COL_AT), s => { const ds = s.docs.map(d => ({ id: d.id, ...d.data() })); comissao = ds.find(d => d.id === COMISSAO) || {}; atletas = ds.filter(d => d.id !== COMISSAO); carregou.at = true; erroLeitura = null; render(); }, e => falhou("at", e));
   onSnapshot(collection(db, COL_ET), s => {
     etapas = s.docs.map(d => ({ id: d.id, ...d.data() })).map(e => ({ ...e, partidas: e.partidas || [], atletas: e.atletas || [] }));
     carregou.et = true;
@@ -267,7 +268,7 @@ export function montarApp(ctx) {
   }
   function detalheAtleta(a, nEt) {
     return h("div", { class: "card col", style: "border-color:var(--accent-hi)" },
-      h("div", { class: "atleta-top" }, h("div", { class: "camisa", text: a.num ?? "–" }), h("div", { style: "flex:1" }, h("h3", { text: a.nome }), h("p", { class: "cap", text: a.etapas + " de " + nEt + " etapas · " + a.j + " partidas" + (a.ativo === false ? " · inativo" : "") })),
+      h("div", { class: "atleta-top" }, h("div", { class: "camisa", text: a.num ?? "–" }), h("div", { style: "flex:1" }, h("h3", null, a.nome, a.capitao && a.ativo !== false && h("span", { class: "t-capbadge", title: "Capitão", text: "C" })), h("p", { class: "cap", text: a.etapas + " de " + nEt + " etapas · " + a.j + " partidas" + (a.ativo === false ? " · inativo" : "") })),
         h("button", { type: "button", class: "ghost mini", onclick: () => { atlSel = null; render(); } }, "Fechar")),
       h("div", { class: "tiles" }, tile("Participação", nEt ? pct(a.etapas / nEt) : "–", a.etapas + " etapas", "y"), tile("Pontos", a.p, C.f1(a.med) + " por partida"), tile("Aproveitamento", a.j ? pct(a.aprov) : "–", a.v + "V " + (a.j - a.v) + "D"),
         tile("Bloqueios", a.b, a.j ? C.f1(a.b / a.j) + " por partida" : ""), tile("Assistências", a.as, a.j ? C.f1(a.as / a.j) + " por partida" : ""), tile("Medalhas", a.medalhas.reduce((s, x) => s + x, 0), a.medalhas.map((x, k) => x ? x + C.MEDALHA[k] : "").filter(Boolean).join(" ") || "–")),
@@ -277,15 +278,24 @@ export function montarApp(ctx) {
   function cardElenco() {
     const card = h("div", { class: "card col" }, h("h3", { text: "Elenco de Mococa" }));
     if (!podeEditar()) {
-      card.append(h("div", { class: "atl-chips" }, ativos().map(a => h("span", { text: (a.num != null ? "#" + a.num + " " : "") + a.nome }))));
+      if (comissao.tecnico) card.append(h("p", { class: "cap", text: "Técnico: " + comissao.tecnico }));
+      card.append(h("div", { class: "atl-chips" }, ativos().map(a => h("span", { text: (a.num != null ? "#" + a.num + " " : "") + a.nome + (a.capitao ? " (C)" : "") }))));
       return card;
     }
+    card.append(h("label", { class: "t-lbl" }, "Técnico (opcional)", h("input", { id: "mc-tec", value: comissao.tecnico || "", maxlength: 40, placeholder: "Nome do técnico",
+      onchange: ev => setDoc(doc(db, COL_AT, COMISSAO), { comissao: true, tecnico: ev.target.value.trim() }, { merge: true }).then(() => toast("Técnico salvo.")).catch(() => toast("Não deu para salvar.")) })));
+    const marcarCapitao = async id => {
+      const b = writeBatch(db); atletas.filter(x => x.capitao && x.id !== id).forEach(x => b.update(doc(db, COL_AT, x.id), { capitao: false }));
+      const at = atletas.find(x => x.id === id); b.update(doc(db, COL_AT, id), { capitao: !at.capitao }); await b.commit();
+      toast(at.capitao ? at.nome + " não é mais o capitão." : at.nome + " é o capitão.");
+    };
     card.append(h("p", { class: "cap", text: "Só os atletas de Mococa entram aqui. Adversários são só nomes nas partidas. Atleta que saiu: desmarque \"ativo\" (o histórico continua)." }));
     const usados = new Set(etapas.flatMap(e => e.atletas || []));
     card.append(h("div", { class: "roster" }, [...atletas].sort((a, b) => (b.ativo !== false) - (a.ativo !== false) || a.nome.localeCompare(b.nome, "pt-BR")).map(a => h("div", { class: "r" },
       h("input", { type: "number", min: 0, max: 99, value: a.num ?? "", "aria-label": "Número de " + a.nome, onchange: ev => updateDoc(doc(db, COL_AT, a.id), { num: ev.target.value === "" ? null : +ev.target.value }) }),
       h("input", { value: a.nome, maxlength: 30, "aria-label": "Nome", onchange: ev => { const v = ev.target.value.trim(); if (v.length >= 2) updateDoc(doc(db, COL_AT, a.id), { nome: v }); } }),
       h("div", { class: "linha", style: "flex-wrap:nowrap" },
+        h("button", { type: "button", class: "t-capbtn", "aria-pressed": String(!!a.capitao), title: a.capitao ? "Capitão (toque para tirar)" : "Marcar como capitão", "aria-label": "Capitão: " + a.nome, onclick: () => marcarCapitao(a.id) }, "C"),
         h("button", { type: "button", class: "ghost mini", "aria-pressed": String(a.ativo !== false), onclick: () => updateDoc(doc(db, COL_AT, a.id), { ativo: a.ativo === false }) }, a.ativo === false ? "Inativo" : "Ativo"),
         !usados.has(a.id) && h("button", { type: "button", class: "danger mini", "aria-label": "Remover " + a.nome, onclick: () => perguntar("Remover " + a.nome + " do elenco?", () => deleteDoc(doc(db, COL_AT, a.id)), "Remover") }, "×"))))));
     const f = h("form", { class: "linha", onsubmit: async ev => {
@@ -657,7 +667,8 @@ export function montarApp(ctx) {
   /* ---------- demonstração ---------- */
   async function criarDemo() {
     const { atletas: at, etapas: et, confirmacoes } = gerarDemo(), b = writeBatch(db);
-    at.forEach(({ id, ...a }) => b.set(doc(db, COL_AT, id), a));
+    at.forEach(({ id, ...a }, k) => b.set(doc(db, COL_AT, id), { ...a, ...(k === 0 && !atletas.some(x => x.capitao) ? { capitao: true } : {}) }));
+    if (!comissao.tecnico) b.set(doc(db, COL_AT, COMISSAO), { comissao: true, tecnico: "Prof. Carlos Mendes", demo: true }, { merge: true });
     et.forEach(({ id, ...e }) => b.set(etapaRef(id), limpar(e)));
     confirmacoes.forEach(({ id, ...c }) => b.set(doc(db, COL_ET, "demo-prox", COL_CONF, id), c));
     await b.commit(); toast("Demonstração criada. Explore as abas!");
@@ -665,6 +676,7 @@ export function montarApp(ctx) {
   async function apagarDemo() {
     const b = writeBatch(db);
     atletas.filter(a => a.demo).forEach(a => b.delete(doc(db, COL_AT, a.id)));
+    if (comissao.demo) b.delete(doc(db, COL_AT, COMISSAO));
     etapas.filter(e => e.demo).forEach(e => { (confs[e.id] || []).forEach(c => b.delete(doc(db, COL_ET, e.id, COL_CONF, c.id))); b.delete(etapaRef(e.id)); });
     await b.commit(); atlSel = null; toast("Demonstração apagada.");
   }

@@ -78,7 +78,7 @@ const LUG_ESQ = [[160, 420], [160, 180], [385, 180], [385, 420]];
 const lugar = (lado, k) => { const [x, y] = LUG_ESQ[k]; return lado === "esq" ? [x, y] : [W - x, H + 35 - y]; };
 const ultimos = new Map(); // chave do desenho -> Map(aid -> [x, y]) para animar o movimento
 
-function boneco(cor, num, nome, olhaDireita, sacando) {
+function boneco(cor, num, nome, olhaDireita, sacando, capitao) {
   const c = CORES[cor] || CORES.azul, d = olhaDireita ? 1 : -1;
   return [
     s("ellipse", { cx: 0, cy: 62, rx: 74, ry: 17, fill: "none", stroke: sacando ? "#ffd84a" : "rgba(255,255,255,.55)", "stroke-width": sacando ? 6 : 3, class: sacando ? "rz-anel" : null }),
@@ -93,6 +93,8 @@ function boneco(cor, num, nome, olhaDireita, sacando) {
     s("circle", { cx: -d * 17, cy: 9, r: 10, fill: c.escuro }),
     [[-3, -2], [3, -2], [0, 3], [-3, 4], [3, 4]].map(([x, y]) => s("circle", { cx: -d * 17 + x, cy: 9 + y, r: 1.4, fill: "rgba(255,255,255,.55)" })),
     s("circle", { cx: d * -1, cy: -16, r: 13.5, fill: "#fff", stroke: c.escuro, "stroke-width": 1.5 }),
+    capitao && s("g", { transform: `translate(${d * 24},-30)` }, s("circle", { r: 11, fill: "#ffd84a", stroke: "#8a6a00", "stroke-width": 2 }),
+      s("text", { x: 0, y: 5.5, "text-anchor": "middle", "font-size": 15, "font-weight": 900, fill: "#3a2a00", "font-family": "Arial, sans-serif" }, "C")),
     s("text", { x: d * -1, y: -10.5, "text-anchor": "middle", "font-size": 17, "font-weight": 800, fill: "#111", "font-family": "Arial, sans-serif" }, num == null ? "–" : String(num)),
     s("rect", { x: -74, y: 76, width: 148, height: 30, rx: 15, fill: "rgba(4,18,40,.8)" }),
     s("text", { x: 0, y: 97.5, "text-anchor": "middle", "font-size": 20, "font-weight": 700, fill: "#fff", "font-family": "Arial, sans-serif" }, (nome || "").length > 12 ? nome.slice(0, 11) + "…" : nome || ""),
@@ -145,7 +147,7 @@ export function piscina(o) {
     const lado = ladoDe(l), cor = corDe(rz, l);
     est.pos[l].forEach((aid, k) => {
       const [x, y] = lugar(lado, k), at = (rz.atl && rz.atl[aid]) || {};
-      const g = s("g", { class: "rz-jog" }, s("g", { transform: "scale(1.32)" }, boneco(cor, at.num, at.nome, lado === "esq", est.saque === l && k === 0)));
+      const g = s("g", { class: "rz-jog" }, s("g", { transform: "scale(1.32)" }, boneco(cor, at.num, at.nome, lado === "esq", est.saque === l && k === 0, !!at.cap)));
       const prev = antes.get(aid);
       g.style.transform = `translate(${(prev || [x, y])[0]}px,${(prev || [x, y])[1]}px)`;
       if (!prev) g.style.opacity = "0";
@@ -160,7 +162,7 @@ export function piscina(o) {
 
 // faixa de texto com quem saca e o último lance
 export function legenda(h, rz, est, nomes) {
-  const at = aid => (rz.atl && rz.atl[aid]) || {};
+  const at = aid => { const x = (rz.atl && rz.atl[aid]) || {}; return x.cap ? { ...x, nome: (x.nome || "") + " (C)" } : x; };
   const sac = at(est.pos[est.saque][0]), cor = CORES[corDe(rz, est.saque)];
   const ult = est.ult;
   const txtUlt = !ult ? "Início do set: ninguém rodou ainda." :
@@ -218,7 +220,7 @@ function novoRasc(o, iSet, editar) {
 function formFormacao(o, iSet) {
   const { h, j } = o, r = rasc, nomes = { a: o.nomeA, b: o.nomeB };
   const rzPrev = { toucaA: r.toucaA, atl: {}, elenco: { a: (o.atletas.a || []).map(a => a.id), b: (o.atletas.b || []).map(a => a.id) } };
-  ["a", "b"].forEach(l => (o.atletas[l] || []).forEach(a => { const v = r.num[a.id]; rzPrev.atl[a.id] = { nome: a.nome, num: v === "" || v == null || Number.isNaN(Number(v)) ? null : Number(v) }; }));
+  ["a", "b"].forEach(l => (o.atletas[l] || []).forEach(a => { const v = r.num[a.id]; rzPrev.atl[a.id] = { nome: a.nome, num: v === "" || v == null || Number.isNaN(Number(v)) ? null : Number(v), ...(o.capitaes && o.capitaes[l] === a.id ? { cap: true } : {}) }; }));
   const ok = ["a", "b"].every(l => r.pos[l].length === 4 && r.pos[l].every(Boolean) && new Set(r.pos[l]).size === 4);
   const f = h("div", { class: "rz-form" });
   f.append(h("p", { class: "cap", text: iSet === 0 ? "Antes do jogo: confira os números das toucas, quem começa em cada lado, quem saca e onde cada atleta começa." : "Novo set: as equipes trocam de lado. Confira quem saca e, se quiserem, mude a formação." }));
@@ -246,7 +248,7 @@ function formFormacao(o, iSet) {
       h("span", { text: a.nome })))));
     card.append(h("div", { class: "rz-poss" }, POS_NOMES.map((pn, k) => h("label", { class: "t-lbl" }, pn + (k === 0 ? " 🏐" : ""),
       h("select", { onchange: e => { const v = e.target.value, outra = r.pos[l].indexOf(v); if (outra >= 0 && outra !== k) r.pos[l][outra] = r.pos[l][k]; r.pos[l][k] = v; o.render(); } },
-        ats.map(a => h("option", { value: a.id, selected: r.pos[l][k] === a.id }, (r.num[a.id] !== "" && r.num[a.id] != null ? r.num[a.id] + " · " : "") + a.nome)))))));
+        ats.map(a => h("option", { value: a.id, selected: r.pos[l][k] === a.id }, (r.num[a.id] !== "" && r.num[a.id] != null ? r.num[a.id] + " · " : "") + a.nome + (o.capitaes && o.capitaes[l] === a.id ? " (C)" : ""))))))));
     const res = ats.filter(a => !r.pos[l].includes(a.id));
     card.append(h("p", { class: "cap", text: "Reservas: " + (res.length ? res.map(a => (r.num[a.id] !== "" ? r.num[a.id] + " " : "") + a.nome).join(", ") : "nenhum") }));
     f.append(card);
@@ -458,8 +460,9 @@ export function sugerirDemora(j, l) { return (j.sancoes || []).some(x => x.l ===
 // seção da súmula com os cartões; o = { h, j, nomeA, nomeB, atletas, ed, fim, ponto, salvar, toast, render }
 export function painelDisciplina(o) {
   const { h, j, ed } = o, nomes = { a: o.nomeA, b: o.nomeB }, rz = j.rodizio || {};
-  const numDe = (l, id) => { const a = (o.atletas[l] || []).find(x => x.id === id) || {}; const n = rz.atl && rz.atl[id] && rz.atl[id].num != null ? rz.atl[id].num : a.num; return (n ?? "–") + " " + (a.nome || (rz.atl && rz.atl[id] && rz.atl[id].nome) || ""); };
-  const quemTxt = x => MEMBROS_EXTRA[x.quem] || "nº " + numDe(x.l, x.quem);
+  const numDe = (l, id) => { const a = (o.atletas[l] || []).find(x => x.id === id) || {}; const n = rz.atl && rz.atl[id] && rz.atl[id].num != null ? rz.atl[id].num : a.num; return (n ?? "–") + " " + (a.nome || (rz.atl && rz.atl[id] && rz.atl[id].nome) || "") + (o.capitaes && o.capitaes[l] === id ? " (C)" : ""); };
+  const tecDe = l => (o.tecnicos && o.tecnicos[l]) || "";
+  const quemTxt = x => x.quem === "tec" ? "Técnico" + (tecDe(x.l) ? " " + tecDe(x.l) : "") : MEMBROS_EXTRA[x.quem] || "nº " + numDe(x.l, x.quem);
   const lista = j.sancoes || [];
   const w = h("section", { class: "rz rz-disc" }, h("h3", { class: "rz-tit", text: "Disciplina" }));
   if (lista.length) w.append(h("div", { class: "rz-sancs" }, lista.map((x, i) => h("div", { class: "rz-sanc " + x.tipo },
@@ -489,7 +492,7 @@ export function painelDisciplina(o) {
     h("label", { class: "t-lbl" }, "Quem",
       h("select", { onchange: e => { df.quem = e.target.value; o.render(); } },
         ats.map(a => h("option", { value: a.id, selected: df.quem === a.id }, "nº " + numDe(df.l, a.id) + (expulsos(j).has(a.id) ? " – expulso" : ""))),
-        ["tec", "com"].map(k => h("option", { value: k, selected: df.quem === k }, MEMBROS_EXTRA[k])))),
+        ["tec", "com"].map(k => h("option", { value: k, selected: df.quem === k }, k === "tec" && tecDe(df.l) ? "Técnico: " + tecDe(df.l) : MEMBROS_EXTRA[k])))),
     h("div", { class: "rz-alerta info" }, h("b", { text: "Sugestão pela regra" }), h("span", { text: sug.msg })),
     sug.tipo !== null && h("div", { class: "rz-sbtns" },
       bt("adv"), bt("amarelo", " – perde o rally"), bt("vermelho"),

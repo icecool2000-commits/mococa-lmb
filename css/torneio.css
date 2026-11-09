@@ -340,3 +340,12 @@ button.mini{padding:4px 10px;font-size:12px}
 .eqx-forma .v{background:var(--win,#2f86c8)}.eqx-forma .d{background:var(--loss,#c4544a)}.eqx-forma .e{background:#8a94a3}
 .eqx-tab{overflow-x:auto;max-width:100%}
 .eqx-tab td.v{color:var(--win,#2f86c8);font-weight:700}.eqx-tab td.d{color:var(--loss,#c4544a);font-weight:700}
+/* Capitão, técnico e cartões */
+.t-capbtn{flex:none;width:34px;height:34px;padding:0;border-radius:50%;font-weight:900;background:transparent;color:var(--muted);border:2px dashed var(--line)}
+.t-capbtn[aria-pressed="true"]{background:#ffd84a;color:#3a2a00;border:2px solid #8a6a00}
+.t-capbadge{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#ffd84a;color:#3a2a00;border:1.5px solid #8a6a00;font-size:11px;font-weight:900;margin-left:6px;vertical-align:middle;flex:none}
+.t-tec{margin:2px 0 4px}
+.t-tecro,.t-comissao{margin:2px 0}
+.t-cartao{display:inline-block;width:11px;height:15px;border-radius:2px;margin-left:5px;vertical-align:middle;box-shadow:0 0 0 1px rgb(0 0 0 / .25)}
+.t-cartao.amarelo{background:#f2c21b}.t-cartao.vermelho{background:#e0282e}
+td.t-am{color:#b38900;font-weight:700}td.t-vm{color:#e0282e;font-weight:700}

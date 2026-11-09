@@ -132,7 +132,7 @@ export function montarDados(T, jogos, esporte) {
   // estatísticas
   const sa = C.statsAtletas(fim);
   const jogosEq = {}; fim.forEach(j => { jogosEq[j.a] = (jogosEq[j.a] || 0) + 1; jogosEq[j.b] = (jogosEq[j.b] || 0) + 1; });
-  const atletas = T.equipes.flatMap(e => (e.atletas || []).map(a => { const s = sa[a.id] || { p: 0, b: 0, as: 0 }; const nj = jogosEq[e.id] || 0; return { ...a, equipe: e.nome, eid: e.id, p: s.p, b: s.b, as: s.as, nj, med: nj ? s.p / nj : 0 }; }));
+  const atletas = T.equipes.flatMap(e => (e.atletas || []).map(a => { const s = sa[a.id] || { p: 0, b: 0, as: 0 }; const nj = jogosEq[e.id] || 0; return { ...a, nome: a.nome + (e.capitao === a.id ? " (C)" : ""), equipe: e.nome, eid: e.id, p: s.p, b: s.b, as: s.as, nj, med: nj ? s.p / nj : 0 }; }));
   const pts = {}, vd = {}, medEq = {};
   T.equipes.forEach(e => { pts[e.id] = { geral: { pf: 0, pc: 0, n: 0 } }; vd[e.id] = {}; });
   fim.forEach(j => {
@@ -400,7 +400,7 @@ export async function tabelaPDF(T, jogos, esporte, marca) {
     let y = cabecalho(doc, logo, T.nome, [et.nome, et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · "));
     if (et.vazio) {
       y = secao(doc, y, "Equipes inscritas", logo);
-      y = tabela(doc, y, { head: [["#", "Equipe", "Atletas"]], body: T.equipes.map((e, i) => [i + 1, e.nome, (e.atletas || []).map(a => (a.num != null ? a.num + " " : "") + a.nome).join(", ")]), columnStyles: { 0: { halign: "center", cellWidth: 10 }, 1: { fontStyle: "bold", cellWidth: 45 } } }, logo);
+      y = tabela(doc, y, { head: [["#", "Equipe", "Atletas"]], body: T.equipes.map((e, i) => [i + 1, e.nome + (e.tecnico ? "\nTécnico: " + e.tecnico : ""), (e.atletas || []).map(a => (a.num != null ? a.num + " " : "") + a.nome + (e.capitao === a.id ? " (C)" : "")).join(", ")]), columnStyles: { 0: { halign: "center", cellWidth: 10 }, 1: { fontStyle: "bold", cellWidth: 45 } } }, logo);
       doc.setFontSize(9); doc.setTextColor("#777"); doc.text("O sorteio desta etapa ainda não foi feito.", 10, y); doc.setTextColor("#1a1a1a");
       return;
     }
@@ -527,7 +527,7 @@ export async function relatorioPDF(T, jogos, esporte, marca) {
   T.equipes.forEach(e => {
     const ats = D.atletas.filter(a => a.eid === e.id).sort((a, b) => b.p - a.p);
     if (!ats.length) return;
-    y = secao(doc, y, e.nome, logo);
+    y = secao(doc, y, e.nome + (e.tecnico ? " · Técnico: " + e.tecnico : ""), logo);
     y = tabela(doc, y, { head: [["Nº", "Atleta", "Jogos", "Pontos", "Média", D.atletasLbl, "Assist."]], body: ats.map(a => [a.num ?? "", a.nome, a.nj, a.p, f1(a.med), a.b, a.as]),
       styles: { fontSize: 8.2, halign: "center", lineColor: "#cfd6de", lineWidth: 0.15 }, columnStyles: { 1: { halign: "left" } },
       didParseCell: d => { if (d.section === "body" && d.row.index === 0 && ats[0].p > 0) d.cell.styles.fontStyle = "bold"; } }, logo);
@@ -601,7 +601,7 @@ export async function tabelaXLSX(T, jogos, esporte, marca) {
   D.etapas.forEach(et => {
     const cab = cabJogos(D.BIR);
     const ws = folha(wb, et.nome, marca, logo, T.nome, [et.nome, et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") + " · Tabela de jogos", D.BIR ? [7, 13, 6, 24, 12, 12, 12, 24, 8, 22] : [7, 13, 6, 22, 7, 7, 7, 7, 7, 10, 7, 22, 18]);
-    if (et.vazio) { tituloSecao(ws, "Equipes inscritas (sorteio ainda não feito)", E); tabelaXL(ws, ["#", "Equipe", "Atletas"], T.equipes.map((e, i) => [i + 1, e.nome, (e.atletas || []).map(a => a.nome).join(", ")]), E, { quebra: true }); return; }
+    if (et.vazio) { tituloSecao(ws, "Equipes inscritas (sorteio ainda não feito)", E); tabelaXL(ws, ["#", "Equipe", "Técnico", "Atletas"], T.equipes.map((e, i) => [i + 1, e.nome, e.tecnico || "", (e.atletas || []).map(a => a.nome + (e.capitao === a.id ? " (C)" : "")).join(", ")]), E, { quebra: true }); return; }
     et.tabelas.forEach(g => {
       tituloSecao(ws, g.titulo + " – classificação", E);
       tabelaXL(ws, ["Pos.", "Equipe", "", "", ...(PTS() ? ["Pts"] : []), "J", "V", ...(D.BIR ? [] : ["E"]), "D", "PF", "PT", "Saldo"], g.classif.map((r, i) => [i + 1 + "º", D.nome(r.eid), "", "", ...(PTS() ? [r.j ? r.pg : ""] : []), r.j || "", r.j ? r.v : "", ...(D.BIR ? [] : [r.j ? r.e : ""]), r.j ? r.d : "", r.j ? r.pf : "", r.j ? r.pc : "", r.j ? r.saldo : ""]), E, { negrito: [1], altura: 20, mesclas: [[1, 3]] });
@@ -749,9 +749,11 @@ function dadosSumula(T, j, esporte) {
   const eq = id => (T.equipes || []).find(e => e.id === id) || { nome: "?", atletas: [] };
   const lados = ["a", "b"].map(l => {
     const e = eq(j[l]), ats = [...(e.atletas || [])].sort((x, y) => (x.num ?? 999) - (y.num ?? 999));
-    const linhas = ats.map(a => { const s = (j.stats || {})[a.id] || {}; return { num: a.num ?? "", nome: a.nome, p: s.p || 0, b: s.b || 0, as: s.as || 0 }; });
+    const cart = aid => (j.sancoes || []).filter(x => x.l === l && x.quem === aid && (x.tipo === "amarelo" || x.tipo === "vermelho")).map(x => x.tipo === "amarelo" ? "Amarelo" : "Vermelho").join(" + ");
+    const linhas = ats.map(a => { const s = (j.stats || {})[a.id] || {}; return { num: a.num ?? "", nome: a.nome + (e.capitao === a.id ? " (C)" : ""), p: s.p || 0, b: s.b || 0, as: s.as || 0, cart: cart(a.id) }; });
     const tot = linhas.reduce((t, x) => ({ p: t.p + x.p, b: t.b + x.b, as: t.as + x.as }), { p: 0, b: 0, as: 0 });
-    return { nome: e.nome, linhas, tot, venceu: r.venc === j[l] };
+    const cp = (e.atletas || []).find(a => a.id === e.capitao);
+    return { nome: e.nome, linhas, tot, venceu: r.venc === j[l], tecnico: e.tecnico || "", capitao: cp ? "nº " + (cp.num ?? "–") + " " + cp.nome : "" };
   });
   const parciais = BIR ? (j.sets || []).filter(s => s.a || s.b).map((s, i) => ({ n: i < 2 ? (i + 1) + "º set" : "Tiebreak", a: s.a, b: s.b }))
     : (j.periodos || []).map(p => ({ n: /^\d/.test(p.n) ? p.n.replace("Q", "º quarto") : p.n === "BO" ? "Bola de ouro" : "Prorrogação " + p.n.slice(1), a: p.a, b: p.b }));
@@ -760,10 +762,11 @@ function dadosSumula(T, j, esporte) {
   const destaque = [...lados[0].linhas.map(x => ({ ...x, eq: lados[0].nome })), ...lados[1].linhas.map(x => ({ ...x, eq: lados[1].nome }))].sort((x, y) => y.p - x.p)[0];
   // sanções que vão para a súmula (advertência verbal não vai: regra 46.1)
   const ROT = { amarelo: "Cartão amarelo", vermelho: "Cartão vermelho (expulsão)", advDemora: "Advertência por demora", penDemora: "Penalização por demora" };
-  const quem = x => x.quem === "tec" ? "Técnico" : x.quem === "com" ? "Comissão técnica" : x.quem === "eq" ? "Equipe" : (() => { const a = (eq(j[x.l]).atletas || []).find(y => y.id === x.quem) || {}; const n = j.rodizio && j.rodizio.atl && j.rodizio.atl[x.quem] && j.rodizio.atl[x.quem].num != null ? j.rodizio.atl[x.quem].num : a.num; return "nº " + (n ?? "–") + " " + (a.nome || ""); })();
+  const quem = x => x.quem === "tec" ? "Técnico" + (eq(j[x.l]).tecnico ? " " + eq(j[x.l]).tecnico : "") : x.quem === "com" ? "Comissão técnica" : x.quem === "eq" ? "Equipe" : (() => { const a = (eq(j[x.l]).atletas || []).find(y => y.id === x.quem) || {}; const n = j.rodizio && j.rodizio.atl && j.rodizio.atl[x.quem] && j.rodizio.atl[x.quem].num != null ? j.rodizio.atl[x.quem].num : a.num; return "nº " + (n ?? "–") + " " + (a.nome || "") + (eq(j[x.l]).capitao === x.quem ? " (C)" : ""); })();
   const sancoes = (j.sancoes || []).filter(x => ROT[x.tipo]).map(x => [ROT[x.tipo], eq(j[x.l]).nome, quem(x), x.set < 2 ? (x.set + 1) + "º set" : "Tiebreak", x.placar || ""]);
   const incompleta = j.incompleta ? eq(j[j.incompleta]).nome + " declarada incompleta (regra 23.3)" : "";
-  return { BIR, et, lados, parciais, placar, sancoes, incompleta, resultado, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };
+  const temCart = lados.some(l => l.linhas.some(x => x.cart));
+  return { BIR, et, lados, parciais, placar, sancoes, incompleta, temCart, resultado, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };
 }
 const nomeSumula = (T, j, D, ext) => arquivo(T, "sumula-" + (D.lados[0].nome + "-x-" + D.lados[1].nome).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase() + "." + ext);
 
@@ -789,8 +792,9 @@ export async function sumulaPDF(T, j, esporte, marca) {
   const lbl = D.BIR ? "Bloqueios" : "Tocos";
   D.lados.forEach(l => {
     y = secao(doc, y, "Atletas – " + l.nome, logo);
-    const body = l.linhas.length ? l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as]) : [["", "(atletas não cadastrados)", "", "", ""]];
-    y = tabela(doc, y, { head: [["Nº", "Atleta", "Pontos", lbl, "Assist."]], body: [...body, ["", "Total", l.tot.p, l.tot.b, l.tot.as]],
+    if (l.tecnico || l.capitao) { doc.setFontSize(8.5); doc.setTextColor("#444"); doc.text([l.tecnico && "Técnico: " + l.tecnico, l.capitao && "Capitão: " + l.capitao].filter(Boolean).join("   ·   "), 10, y); doc.setTextColor("#1a1a1a"); y += 4; }
+    const cc = D.temCart, body = l.linhas.length ? l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as, ...(cc ? [x.cart] : [])]) : [["", "(atletas não cadastrados)", "", "", "", ...(cc ? [""] : [])]];
+    y = tabela(doc, y, { head: [["Nº", "Atleta", "Pontos", lbl, "Assist.", ...(cc ? ["Cartões"] : [])]], body: [...body, ["", "Total", l.tot.p, l.tot.b, l.tot.as, ...(cc ? [""] : [])]],
       styles: { halign: "center", fontSize: 8.5, cellPadding: 1.1 }, columnStyles: { 0: { cellWidth: 14 }, 1: { halign: "left" } },
       didParseCell: d => { if (d.section === "body" && d.row.index === body.length) { d.cell.styles.fontStyle = "bold"; d.cell.styles.fillColor = "#e6f2fb"; } } }, logo);
   });
@@ -802,7 +806,7 @@ export async function sumulaPDF(T, j, esporte, marca) {
   // assinaturas
   if (y > doc.internal.pageSize.getHeight() - 36) { doc.addPage(); y = cabecalho(doc, logo, "Súmula da partida", D.info); }
   y += 8; doc.setDrawColor("#888"); doc.setLineWidth(0.3); doc.setFontSize(8.5); doc.setTextColor("#555");
-  const ass = ["Árbitro", "Mesário / anotador", "Capitão – " + D.lados[0].nome, "Capitão – " + D.lados[1].nome], cw = (W - 30) / 2;
+  const ass = ["Árbitro", "Mesário / anotador", ...D.lados.map(l => "Capitão – " + l.nome + (l.capitao ? " (" + l.capitao + ")" : "")), ...D.lados.filter(l => l.tecnico).map(l => "Técnico – " + l.nome + " (" + l.tecnico + ")")], cw = (W - 30) / 2;
   ass.forEach((t, i) => { const x = 10 + (i % 2) * (cw + 10), yy = y + Math.floor(i / 2) * 15; doc.line(x, yy, x + cw, yy); doc.text(doc.splitTextToSize(t, cw)[0], x, yy + 4.5); });
   rodapes(doc);
   doc.save(nomeSumula(T, j, D, "pdf"));
@@ -818,13 +822,14 @@ export async function sumulaXLSX(T, j, esporte, marca) {
   tabelaXL(ws, ["", D.lados[0].nome, "", D.lados[1].nome, ""], [...D.parciais.map(p => [p.n, "", p.a, "", p.b]), ["Total", "", D.parciais.reduce((s, p) => s + (p.a || 0), 0), "", D.parciais.reduce((s, p) => s + (p.b || 0), 0)]], E, { esq: [0], negrito: [0, 2, 4] });
   const lbl = D.BIR ? "Bloqueios" : "Tocos";
   D.lados.forEach(l => {
-    tituloSecao(ws, "Atletas – " + l.nome, E);
-    tabelaXL(ws, ["Nº", "Atleta", "Pontos", lbl, "Assist."], [...l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as]), ["", "Total", l.tot.p, l.tot.b, l.tot.as]], E, { esq: [1], negrito: [2], destaque: i => i === l.linhas.length });
+    tituloSecao(ws, "Atletas – " + l.nome + (l.tecnico ? " · Técnico: " + l.tecnico : "") + (l.capitao ? " · Capitão: " + l.capitao : ""), E);
+    const cc = D.temCart;
+    tabelaXL(ws, ["Nº", "Atleta", "Pontos", lbl, "Assist.", ...(cc ? ["Cartões"] : [])], [...l.linhas.map(x => [x.num, x.nome, x.p, x.b, x.as, ...(cc ? [x.cart] : [])]), ["", "Total", l.tot.p, l.tot.b, l.tot.as, ...(cc ? [""] : [])]], E, { esq: [1], negrito: [2], destaque: i => i === l.linhas.length });
   });
   if (D.sancoes.length || D.incompleta) { tituloSecao(ws, "Sanções", E); tabelaXL(ws, ["Sanção", "Equipe", "Quem", "Set", "Placar"], [...D.sancoes, ...(D.incompleta ? [[D.incompleta, "", "", "", ""]] : [])], E, { esq: [0, 1, 2] }); }
   if (D.destaque) { tituloSecao(ws, (D.BIR ? "Maior pontuador: " : "Cestinha: ") + D.destaque.nome + " (" + D.destaque.eq + ") – " + D.destaque.p + " pontos", E); ws.__linha++; }
   tituloSecao(ws, "Assinaturas", E);
-  ["Árbitro", "Mesário / anotador", "Capitão – " + D.lados[0].nome, "Capitão – " + D.lados[1].nome].forEach(t => {
+  ["Árbitro", "Mesário / anotador", ...D.lados.map(l => "Capitão – " + l.nome + (l.capitao ? " (" + l.capitao + ")" : "")), ...D.lados.filter(l => l.tecnico).map(l => "Técnico – " + l.nome + " (" + l.tecnico + ")")].forEach(t => {
     const r = ws.__linha; ws.getRow(r).height = 30; ws.getCell(r, 1).value = t; ws.getCell(r, 1).font = { name: "Calibri", size: 10, color: { argb: "FF555555" } };
     ws.mergeCells(r, 2, r, 5); ws.getCell(r, 2).border = { bottom: { style: "thin", color: { argb: "FF888888" } } }; ws.__linha = r + 1;
   });

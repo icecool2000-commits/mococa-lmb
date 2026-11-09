@@ -5,6 +5,7 @@ import * as C from "./torneio-core.js";
 function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 
 const NOMES = ["Adriano","Bruno","Caio","Danilo","Eduardo","Fábio","Gustavo","Heitor","Igor","João","Kauã","Leandro","Marcelo","Nícolas","Otávio","Paulo","Rafael","Sérgio","Tiago","Vinícius","Wagner","Yuri","André","Beto","Cláudio","Diego","Émerson","Felipe","Gabriel","Hugo","Ivan","Júlio","Lucas","Mateus","Nelson","Osmar","Pedro","Renato","Samuel","Túlio","Ulisses","Vitor","Willian","Alex","Breno","César","Davi","Enzo","Flávio","Guilherme","Henrique","Isaque","Jonas","Léo","Murilo","Nando","Orlando","Pietro","Ronaldo","Saulo","Teo","Valter","Xande","Zeca","Álvaro","Bento","Cristiano","Douglas","Elias","Fernando","Geraldo","Hélio","Ítalo","Jairo","Kleber","Luan","Márcio","Natan","Oscar","Paulinho","Rodrigo","Silvio","Thiago","Vagner"];
+const TECNICOS = ["Carlos Mendes", "Rogério Lima", "Sandra Alves", "Marcos Paiva", "Luciana Costa", "Edson Ramos", "Patrícia Souza", "Valdir Nogueira", "Renata Prado", "Wilson Faria", "Ana Paula Reis", "Jorge Matos"];
 const SOBRE = ["Silva","Souza","Oliveira","Santos","Lima","Pereira","Costa","Ribeiro","Alves","Carvalho","Gomes","Martins","Rocha","Barbosa","Moreira","Teixeira","Freitas","Mendes","Cardoso","Nunes"];
 const EQ_BIRIBOL = ["Tubarões da AEM","Piratas do Lago","Golfinhos Mococa","Arraias FC","Marlins","Orcas","Lontras","Baleias Azuis","Focas","Polvos","Tritões","Moreias","Siris","Peixe-Espada","Barracudas","Cavalos-Marinhos","Pinguins","Ariranhas","Jacarés","Garoupas","Pirarucus","Dourados","Lambaris","Tilápias"];
 const EQ_LIGA = ["Tubarões da AEM","Piratas de Casa Branca","Golfinhos de Itapira","Arraias de Itobi","Marlins de Tambaú","Orcas de Vargem","Lontras de São José","Baleias Azuis","Peixe-Espada Caconde","Barracudas de Guaxupé","Moreias de Arceburgo","Tritões de Santa Cruz","Focas de Mogi Mirim","Polvos de Aguaí","Siris de Pirassununga","Garoupas de Porto Ferreira","Ariranhas de Guaranésia","Jacarés de São João","Dourados de Santa Rosa","Pirarucus de Divinolândia","Cavalos-Marinhos de Mogi Guaçu","Pinguins de Tapiratiba","Lambaris de Muzambinho","Tilápias de Leme"];
@@ -21,7 +22,7 @@ export function gerarDemo(esporte, nomeDemo, opts = {}) {
   const casa = opts.casa || null; // app do time: a 1ª equipe é a da casa, com o elenco
   const nomesEq = (SER ? EQ_LIGA : BIR ? EQ_BIRIBOL : EQ_BASQUETE).slice(0, nEq); if (casa) nomesEq[0] = casa.nome;
   const equipes = nomesEq.map((nome, e) => {
-    if (casa && e === 0 && casa.atletas.length) return { id: "demo-e0", nome, atletas: casa.atletas.slice(0, nAt).map(a => ({ id: a.id, nome: a.nome, num: a.num ?? null })) };
+    if (casa && e === 0 && casa.atletas.length) return { id: "demo-e0", nome, atletas: casa.atletas.slice(0, nAt).map(a => ({ id: a.id, nome: a.nome, num: a.num ?? null })), capitao: casa.capitao || null, tecnico: casa.tecnico || "" };
     const nums = C.embaralhar(Array.from({ length: 30 }, (_, i) => i + 1), R).slice(0, nAt).sort((a, b) => a - b);
     return { id: "demo-e" + e, nome, atletas: nums.map((num, k) => ({ id: "demo-e" + e + "a" + k, num, nome: NOMES[(ni++ * 7) % NOMES.length] + " " + SOBRE[(e * 3 + k) % SOBRE.length][0] + "." })) };
   });
@@ -149,6 +150,31 @@ export function gerarDemo(esporte, nomeDemo, opts = {}) {
       jogar(j, true); jogos.push(j);
     }
   }
+
+  // comissão: capitão em todas as equipes (um dos 3 melhores) e técnico em quase todas
+  equipes.forEach((e, i) => {
+    if (!e.capitao && e.atletas.length) e.capitao = e.atletas[int(0, Math.min(2, e.atletas.length - 1))].id;
+    if (e.tecnico == null || e.tecnico === "") e.tecnico = R() < 0.85 ? "Prof. " + TECNICOS[(i * 5) % TECNICOS.length] : "";
+  });
+  // disciplina (biribol): advertências, cartões e sanções por demora seguindo a escala oficial
+  if (BIR) jogos.filter(j => j.a && j.b && !j.wo && j.status === "encerrado").forEach(j => {
+    const x = R(); if (x > 0.32) return;
+    const sets = (j.sets || []).filter(s2 => s2.a || s2.b), si = int(0, Math.max(0, sets.length - 1)), st = sets[si] || { a: 0, b: 0 };
+    const pl = () => Math.max(0, Math.round(st.a * (0.2 + R() * 0.7))) + "-" + Math.max(0, Math.round(st.b * (0.2 + R() * 0.7)));
+    const l = R() < 0.5 ? "a" : "b", eq = eqDe(j[l]), atl = () => eq.atletas[int(0, eq.atletas.length - 1)].id;
+    const sc = []; const add = (tipo, quem) => sc.push({ tipo, l, quem, set: si, placar: pl(), em: 0 });
+    if (x < 0.14) add("adv", atl());                                      // só advertência verbal
+    else if (x < 0.22) { const q = atl(); add("adv", atl()); add("amarelo", q); }   // advertência e depois amarelo
+    else if (x < 0.26) add("advDemora", "eq");                            // demora
+    else if (x < 0.28) { add("advDemora", "eq"); add("penDemora", "eq"); }
+    else if (x < 0.30) { const q = atl(); add("adv", atl()); add("amarelo", q); add("vermelho", q); } // amarelo e depois vermelho
+    else if (x < 0.31) add("vermelho", atl());                            // vermelho direto (agressão/ofensa)
+    else { add("adv", "tec"); add("amarelo", "tec"); }                    // técnico advertido e punido
+    // placares em ordem crescente (a advertência vem antes do cartão)
+    const pls = sc.map(x => x.placar).sort((p1, p2) => p1.split("-").reduce((t, v) => t + +v, 0) - p2.split("-").reduce((t, v) => t + +v, 0));
+    sc.forEach((x, i) => { x.placar = pls[i]; x.em = i; });
+    j.sancoes = sc;
+  });
 
   const torneio = { nome: "[DEMO] " + (nomeDemo || (BIR ? "Copa Biribol Mococa" : "Copa Família Basquete Mococa")), demo: true, equipes, etapas, criado: Date.now() };
   return { torneio, jogos: jogos.map(j => ({ ...j, criado: Date.now() })) };
