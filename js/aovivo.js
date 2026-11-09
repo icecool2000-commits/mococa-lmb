@@ -181,7 +181,7 @@ export function montarAoVivo(ctx) {
     boxDin.append(cartaoHistorico());
     const { T: tA, js: jA } = jogosDisponiveis(), chave = podeEditar() + "|" + (tA ? tA.id : "") + "|" + jA.map(j => j.id).join(",");
     if (chave !== chaveEditor) { chaveEditor = chave; painelSujo = true; }
-    if (painelSujo) { painelSujo = false; boxEditor.textContent = ""; if (podeEditar()) boxEditor.append(E && E.aoVivo && E.sim ? null : painelEditor(), !MANUAL && esporte === "biribol" && !(E && E.aoVivo) ? cartaoSim() : null, cartaoCanal(), cartaoOverlay()); }
+    if (painelSujo) { painelSujo = false; boxEditor.textContent = ""; if (podeEditar()) boxEditor.append(E && E.aoVivo && E.sim ? null : painelEditor(), !MANUAL && esporte === "biribol" && !(E && E.aoVivo && E.sim) ? cartaoSim() : null, cartaoCanal(), cartaoOverlay()); }
   }
 
   function cabecalho() {
@@ -340,6 +340,7 @@ export function montarAoVivo(ctx) {
   function cartaoSim() {
     return h("div", { class: "t-card t-form" },
       h("h3", { text: "Testar sem jogo real" }),
+      E && E.aoVivo && h("p", { class: "cap", text: "Há uma transmissão marcada como no ar: a simulação toma o lugar dela (o jogo em destaque sai do ar até você começar de novo)." }),
       h("p", { class: "cap", text: "Cria uma partida de simulação (Equipe Azul x Equipe Vermelha, já com a formação confirmada) e coloca no ar aqui e no placar da live (Prism/Streamlabs/OBS). Nada entra no torneio nem no histórico." }),
       h("button", { type: "button", onclick: async () => {
         try { await setDoc(refEstado, { aoVivo: true, titulo: "Teste de transmissão", inicio: Date.now(), videoId: null, videoIdAuto: null, igAtivo: false, col, torneioId: null, jogoId: null, torneioNome: null,
