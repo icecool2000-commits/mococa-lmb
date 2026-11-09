@@ -22,6 +22,18 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.em == request.time;
     }
+    function presencaAmistoso() {
+      return request.auth != null
+        && request.resource.data.keys().hasOnly(['nome', 'em', 'uid'])
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() >= 2
+        && request.resource.data.nome.size() <= 40
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.em == request.time;
+    }
+    function amistosoAberto(id) {
+      return request.time < get(/databases/$(database)/documents/basquete_amistosos/$(id)).data.inicio;
+    }
     function dataDo(dia) {
       let p = dia.split('-');
       return timestamp.date(int(p[0]), int(p[1]), int(p[2]));
@@ -71,6 +83,18 @@ service cloud.firestore {
         allow create: if isAdmin() || (presencaValida(dia) && basqueteAberto(dia));
         allow delete: if isAdmin()
           || (request.auth != null && resource.data.uid == request.auth.uid && basqueteAberto(dia));
+        allow update: if isAdmin();
+      }
+    }
+    // Jogos amistosos: o organizador cria a lista com data, hora, local e adversário (inicio = timestamp do jogo).
+    // Qualquer pessoa confirma até o horário do jogo; depois só o organizador corrige.
+    match /basquete_amistosos/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+      match /basquete_presencas/{p} {
+        allow create: if isAdmin() || (presencaAmistoso() && amistosoAberto(id));
+        allow delete: if isAdmin()
+          || (request.auth != null && resource.data.uid == request.auth.uid && amistosoAberto(id));
         allow update: if isAdmin();
       }
     }
