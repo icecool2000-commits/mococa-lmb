@@ -29,6 +29,7 @@ export function montarApp(ctx) {
   const torneio = montarTorneio({ db, fs: { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch }, esporte: "biribol", col: "mococa_torneios", maxAtletas: 8, toast,
     root: torRoot, podeEditar, nomeDemo: "Liga Metropolitana (simulação)", formatoSeries: true, pontosSets: true, autor: ctx.autor,
     rodizio: true,
+    cartoesLiga: true, // cartões pela regra da Liga (amarelo = ponto; vermelho = fora do set; amarelo+vermelho = fora da etapa)
     aoVivo: { app: "mococa", canal: { id: "UC8NzFZxYbM-XXdNFXOEk6vw", handle: "ligametropolitanadebiribol" }, canalDe: "lmb", instagram: "biribol_mococa" },
     midias: { app: "mococa", perfis: [{ usuario: "biribol_mococa", nome: "Biribol Mococa" }], hashtags: "#biribol #biribolmococa #ligametropolitana" },
     equipeCasa: () => ({ nome: CASA, atletas: [...ativos()].sort((a, b) => (a.num ?? 999) - (b.num ?? 999)), capitao: (ativos().find(a => a.capitao) || {}).id || null, tecnico: comissao.tecnico || "" }),

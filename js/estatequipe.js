@@ -68,8 +68,8 @@ export function calcular(esporte, dados, chave) {
         });
         (j.sancoes || []).forEach(x => { if (x.l !== lado) return;
           if (x.tipo === "advDemora" || x.tipo === "penDemora") S.cart.demora++; else S.cart[x.tipo] = (S.cart[x.tipo] || 0) + 1;
-          if (x.quem === "tec" || x.quem === "com") { if (x.tipo === "amarelo" || x.tipo === "vermelho") S.cart.tec++; return; }
-          const a = (eq.atletas || []).find(y => y.id === x.quem); if (!a) return; const A2 = S.atl[chaveNome(a.nome)]; if (x.tipo === "amarelo") A2.am++; if (x.tipo === "vermelho") A2.vm++; });
+          if (x.quem === "tec" || x.quem === "com") { if (x.tipo === "amarelo" || x.tipo === "vermelho" || x.tipo === "desq") S.cart.tec++; return; }
+          const a = (eq.atletas || []).find(y => y.id === x.quem); if (!a) return; const A2 = S.atl[chaveNome(a.nome)]; if (x.tipo === "amarelo" || x.tipo === "desq") A2.am++; if (x.tipo === "vermelho" || x.tipo === "desq") A2.vm++; });
         contaEq.add(j.id);
         const parciais = BIR ? (j.sets || []).filter(s => (s.a || 0) + (s.b || 0) > 0).map(s => lado === "a" ? s.a + "-" + s.b : s.b + "-" + s.a).join(" ") : "";
         S.jogos.push({ ordem: S.jogos.length, tnome: T.nome, enome: lin.enome, data: et.data || "", fase, adv: an, venceu, emp, wo,
@@ -101,7 +101,7 @@ export function spec(esporte, S, titulo) {
   if (BIR) quad.push(["Sets", S.sv + "–" + S.sp, S.sv + S.sp ? pct(S.sv / (S.sv + S.sp)) + " vencidos" : ""]);
   quad.push(["Pontos feitos", S.pf, S.jp ? f1(S.pf / S.jp) + " por jogo" : ""], ["Pontos sofridos", S.pc, S.jp ? f1(S.pc / S.jp) + " por jogo" : ""], ["Saldo de pontos", sinal(S.pf - S.pc), ""]);
   if (BIR) quad.push(["Tiebreaks", S.tb, S.tb ? S.tbV + " vencidos" : ""], ["Vitórias por 2x0", S.v20, ""], ["Derrotas por 0x2", S.d02, ""]);
-  if (BIR) quad.push(["Cartões", S.cart.amarelo + S.cart.vermelho, S.cart.amarelo + " amarelo(s) · " + S.cart.vermelho + " vermelho(s) · " + S.cart.adv + " advertência(s)"]);
+  if (BIR) { const dq = S.cart.desq || 0; quad.push(["Cartões", S.cart.amarelo + S.cart.vermelho + dq, S.cart.amarelo + " amarelo(s) · " + S.cart.vermelho + " vermelho(s) · " + (dq ? dq + " amarelo + vermelho · " : "") + S.cart.adv + " advertência(s)"]); }
   quad.push(["Medalhas", S.medalhas.reduce((a, b) => a + b, 0), S.medalhas.map((x, k) => x + " " + ["ouro", "prata", "bronze"][k]).join(" · ")],
     ["Maior vitória", S.maiorV ? "+" + S.maiorV.dif : "–", S.maiorV ? S.maiorV.placar + " x " + S.maiorV.adv : ""], ["Pior derrota", S.piorD ? "−" + S.piorD.dif : "–", S.piorD ? S.piorD.placar + " x " + S.piorD.adv : ""],
     ["Maior sequência de vitórias", S.maiorSeqV, ""], ["Sequência atual", S.seq ? S.seq.n + (S.seq.v ? " V" : " D") : "–", ""]);

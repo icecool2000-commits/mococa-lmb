@@ -350,3 +350,8 @@ button.mini{padding:4px 10px;font-size:12px}
 .t-cartao{display:inline-block;width:11px;height:15px;border-radius:2px;margin-left:5px;vertical-align:middle;box-shadow:0 0 0 1px rgb(0 0 0 / .25)}
 .t-cartao.amarelo{background:#f2c21b}.t-cartao.vermelho{background:#e0282e}
 td.t-am{color:#b38900;font-weight:700}td.t-vm{color:#e0282e;font-weight:700}
+/* amarelo + vermelho juntos (regra da Liga: fora da etapa) */
+.rz-sanc.desq{border-left:5px solid #e0282e;box-shadow:inset 5px 0 0 #f2c21b}
+.rz-sbtn.desq.sug{border-color:#e0282e;background:rgb(224 40 46 / .12)}
+.t-fora{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;font-size:.72rem;font-weight:700;color:#fff;background:#e0282e;vertical-align:middle}
+.rz-sbtn{white-space:normal;overflow-wrap:anywhere;max-width:100%}

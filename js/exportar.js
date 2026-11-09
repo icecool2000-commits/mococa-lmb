@@ -749,7 +749,7 @@ function dadosSumula(T, j, esporte) {
   const eq = id => (T.equipes || []).find(e => e.id === id) || { nome: "?", atletas: [] };
   const lados = ["a", "b"].map(l => {
     const e = eq(j[l]), ats = [...(e.atletas || [])].sort((x, y) => (x.num ?? 999) - (y.num ?? 999));
-    const cart = aid => (j.sancoes || []).filter(x => x.l === l && x.quem === aid && (x.tipo === "amarelo" || x.tipo === "vermelho")).map(x => x.tipo === "amarelo" ? "Amarelo" : "Vermelho").join(" + ");
+    const cart = aid => (j.sancoes || []).filter(x => x.l === l && x.quem === aid && (x.tipo === "amarelo" || x.tipo === "vermelho" || x.tipo === "desq")).map(x => x.tipo === "amarelo" ? "Amarelo" : x.tipo === "desq" ? "Amarelo + Vermelho (fora da etapa)" : "Vermelho").join(" + ");
     const linhas = ats.map(a => { const s = (j.stats || {})[a.id] || {}; return { num: a.num ?? "", nome: a.nome + (e.capitao === a.id ? " (C)" : ""), p: s.p || 0, b: s.b || 0, as: s.as || 0, cart: cart(a.id) }; });
     const tot = linhas.reduce((t, x) => ({ p: t.p + x.p, b: t.b + x.b, as: t.as + x.as }), { p: 0, b: 0, as: 0 });
     const cp = (e.atletas || []).find(a => a.id === e.capitao);
@@ -763,7 +763,9 @@ function dadosSumula(T, j, esporte) {
   // sanções que vão para a súmula (advertência verbal não vai: regra 46.1)
   const ROT = { amarelo: "Cartão amarelo", vermelho: "Cartão vermelho (expulsão)", advDemora: "Advertência por demora", penDemora: "Penalização por demora" };
   const quem = x => x.quem === "tec" ? "Técnico" + (eq(j[x.l]).tecnico ? " " + eq(j[x.l]).tecnico : "") : x.quem === "com" ? "Comissão técnica" : x.quem === "eq" ? "Equipe" : (() => { const a = (eq(j[x.l]).atletas || []).find(y => y.id === x.quem) || {}; const n = j.rodizio && j.rodizio.atl && j.rodizio.atl[x.quem] && j.rodizio.atl[x.quem].num != null ? j.rodizio.atl[x.quem].num : a.num; return "nº " + (n ?? "–") + " " + (a.nome || "") + (eq(j[x.l]).capitao === x.quem ? " (C)" : ""); })();
-  const sancoes = (j.sancoes || []).filter(x => ROT[x.tipo]).map(x => [ROT[x.tipo], eq(j[x.l]).nome, quem(x), x.set < 2 ? (x.set + 1) + "º set" : "Tiebreak", x.placar || ""]);
+  ROT.desq = "Amarelo + vermelho juntos (fora da etapa)";
+  const rotS = x => x.tipo === "vermelho" && x.regra === "liga" ? "Cartão vermelho (fora do set)" : ROT[x.tipo];
+  const sancoes = (j.sancoes || []).filter(x => ROT[x.tipo]).map(x => [rotS(x), eq(j[x.l]).nome, quem(x), x.set < 2 ? (x.set + 1) + "º set" : "Tiebreak", x.placar || ""]);
   const incompleta = j.incompleta ? eq(j[j.incompleta]).nome + " declarada incompleta (regra 23.3)" : "";
   const temCart = lados.some(l => l.linhas.some(x => x.cart));
   return { BIR, et, lados, parciais, placar, sancoes, incompleta, temCart, resultado, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };

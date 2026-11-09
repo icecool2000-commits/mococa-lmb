@@ -68,6 +68,8 @@ export function montarTorneio(ctx) {
   if (ctx.statsEquipe) setTimeout(() => { EQ = montarEstatEquipe({ db, fs: ctx.fs, esporte, fontes: [[col, "Este app"]], marca: ctx.marca, toast, render, X, torneioAtual: () => T && T.id, titulo: "Estatísticas por equipe" }); render(); }, 0);
   const ROD = !!ctx.rodizio && esporte === "biribol"; // rodízio dos jogadores na súmula (Liga)
   C.definirRegra({ pontosSets: !!ctx.pontosSets });
+  const LIGA_CART = !!ctx.cartoesLiga; // cartões pela regra da Liga (amarelo = ponto; vermelho = fora do set; amarelo+vermelho = fora da etapa)
+  R.definirRegraCartoes(LIGA_CART ? "liga" : "cnbi");
   const PTS = () => C.REGRA.pontosSets;
   const TXT_CRIT = () => PTS() ? "Pontos: 2x0 = 3 pts; 2x1 = 2 pts para quem vence e 1 pt para quem perde. Desempate: pontos marcados." : "Desempate: vitórias, " + (BIR ? "" : "empates, ") + "saldo de pontos e pontos feitos.";
   // equipe da casa (app do time): nome e atletas vêm do elenco
@@ -209,7 +211,7 @@ export function montarTorneio(ctx) {
   async function criarDemo() {
     const id = "demo-" + Date.now().toString(36);
     try {
-      const { torneio, jogos: js } = gerarDemo(esporte, ctx.nomeDemo, { series: SERIES_OK, casa: casa() });
+      const { torneio, jogos: js } = gerarDemo(esporte, ctx.nomeDemo, { series: SERIES_OK, casa: casa(), cartoesLiga: LIGA_CART });
       const b = writeBatch(db);
       b.set(doc(db, col, id), torneio);
       js.forEach(({ id: jid, ...d }) => b.set(doc(db, col, id, "jogos", jid), d));
@@ -819,6 +821,8 @@ export function montarTorneio(ctx) {
     const peTopo = l => h("div", { class: "t-pe" + (fim && r.venc === j[l] ? " venc" : "") }, h("span", { text: eqNome(j[l]) }), h("b", { text: BIR ? (l === "a" ? r.sa : r.sb) : (l === "a" ? r.pa : r.pb) }));
     painel.append(h("div", { class: "t-placar" }, peTopo(ladoTopo[0]), h("div", { class: "t-x", text: "x" }), peTopo(ladoTopo[1])));
     if (fim) painel.append(h("p", { class: "t-res", text: r.empate ? "Empate" : "Vitória de " + eqNome(r.venc) + (j.periodos && j.periodos.some(p => p.n === "BO") ? " na bola de ouro" : j.periodos && j.periodos.some(p => /^P/.test(p.n)) ? " na prorrogação" : "") }));
+    // atletas com amarelo + vermelho em outros jogos deste torneio (etapa) ficam fora deste jogo
+    R.definirDesqualificados(LIGA_CART ? R.desqualificadosDe(jogos.filter(x => x.id !== j.id)) : []);
     // rodízio (formação, saque, substituições e a piscina com os jogadores) logo abaixo do placar
     if (ROD && j.a && j.b && !j.wo) painel.append(R.painel({ h, j, nomeA: eqNome(j.a), nomeB: eqNome(j.b), ed, fim, toast, render,
       atletas: { a: ((eqDe(j.a) || {}).atletas || []), b: ((eqDe(j.b) || {}).atletas || []) }, capitaes: { a: (eqDe(j.a) || {}).capitao || null, b: (eqDe(j.b) || {}).capitao || null }, tecnicos: { a: (eqDe(j.a) || {}).tecnico || "", b: (eqDe(j.b) || {}).tecnico || "" },
@@ -836,7 +840,8 @@ export function montarTorneio(ctx) {
     const ats = [...((eq && eq.atletas) || [])].sort((x, y) => (x.num ?? 999) - (y.num ?? 999));
     if (eq && (eq.tecnico || eq.capitao)) { const cp = (eq.atletas || []).find(a => a.id === eq.capitao);
       painel.append(h("p", { class: "cap t-comissao", text: [eq.tecnico && "Técnico: " + eq.tecnico, cp && "Capitão: nº " + (cp.num ?? "–") + " " + cp.nome].filter(Boolean).join(" · ") })); }
-    const cartoes = aid => (j.sancoes || []).filter(x => x.quem === aid && (x.tipo === "amarelo" || x.tipo === "vermelho")).map(x => x.tipo);
+    const cartoes = aid => (j.sancoes || []).filter(x => x.quem === aid && (x.tipo === "amarelo" || x.tipo === "vermelho" || x.tipo === "desq")).flatMap(x => x.tipo === "desq" ? ["amarelo", "vermelho"] : [x.tipo]);
+    const TIT_C = { amarelo: "Cartão amarelo", vermelho: LIGA_CART ? "Cartão vermelho (fora do set)" : "Cartão vermelho (expulso)" };
     const st = aid => j.stats[aid] || { p: 0, b: 0, as: 0 };
     const top = maiorPontuador(j);
     if (top) painel.append(h("p", { class: "t-cest", text: (BIR ? "Maior pontuador" : "Cestinha") + ": " + top.nome + " (" + top.p + " pts)" }));
@@ -850,7 +855,8 @@ export function montarTorneio(ctx) {
       const btn = (rot, fn, cls) => h("button", { type: "button", class: "t-sb " + (cls || ""), disabled: !ed || fim, onclick: fn }, modoCorrigir ? rot.replace("+", "−") : rot);
       lista.append(h("div", { class: "t-sa" },
         h("div", { class: "t-sanome" }, h("span", { class: "t-camisa", text: a.num ?? "–" }), h("span", { text: a.nome }), eq.capitao === a.id && h("span", { class: "t-capbadge", title: "Capitão", text: "C" }),
-          cartoes(a.id).map(t => h("span", { class: "t-cartao " + t, title: t === "amarelo" ? "Cartão amarelo" : "Cartão vermelho (expulso)" }))),
+          cartoes(a.id).map(t => h("span", { class: "t-cartao " + t, title: TIT_C[t] })),
+          LIGA_CART && (R.desqualificadoFora(a.id) || (j.sancoes || []).some(x => x.tipo === "desq" && x.quem === a.id)) && h("span", { class: "t-fora", title: "Amarelo + vermelho juntos: só volta na próxima etapa", text: "fora da etapa" })),
         h("div", { class: "t-sanum" }, h("span", null, h("b", { text: s.p }), " pts"), h("span", null, h("b", { text: s.b }), BIR ? " blq" : " toco"), h("span", null, h("b", { text: s.as }), " ast")),
         ed && !fim && h("div", { class: "t-sabtns" },
           BIR ? btn("+Ponto", () => marcarPonto(a.id, 1)) : [btn("+1", () => marcarPonto(a.id, 1)), btn("+2", () => marcarPonto(a.id, 2)), btn("+3", () => marcarPonto(a.id, 3))],
@@ -1106,18 +1112,19 @@ export function montarTorneio(ctx) {
       const porEq = {}, lista = [];
       jsF.forEach(j => (j.sancoes || []).forEach(x => {
         const eid = j[x.l], e = eqDe(eid); if (!e) return;
-        const P = porEq[eid] || (porEq[eid] = { nome: e.nome, adv: 0, amarelo: 0, vermelho: 0, advDemora: 0, penDemora: 0 }); P[x.tipo] = (P[x.tipo] || 0) + 1;
-        if (x.tipo === "amarelo" || x.tipo === "vermelho") { const a = (e.atletas || []).find(y => y.id === x.quem);
-          lista.push([x.tipo === "amarelo" ? "Amarelo" : "Vermelho", x.quem === "tec" ? "Técnico" + (e.tecnico ? " " + e.tecnico : "") : x.quem === "com" ? "Comissão técnica" : a ? "nº " + (a.num ?? "–") + " " + a.nome + capTag(e, a) : "?", e.nome, eqNome(j[x.l === "a" ? "b" : "a"]), j.faseNome || "", (x.set < 2 ? (x.set + 1) + "º set" : "Tiebreak") + " · " + (x.placar || "")]); }
+        const P = porEq[eid] || (porEq[eid] = { nome: e.nome, adv: 0, amarelo: 0, vermelho: 0, desq: 0, advDemora: 0, penDemora: 0 }); P[x.tipo] = (P[x.tipo] || 0) + 1;
+        if (x.tipo === "amarelo" || x.tipo === "vermelho" || x.tipo === "desq") { const a = (e.atletas || []).find(y => y.id === x.quem);
+          lista.push([x.tipo === "amarelo" ? "Amarelo" : x.tipo === "desq" ? "Amarelo + Vermelho" : "Vermelho", x.quem === "tec" ? "Técnico" + (e.tecnico ? " " + e.tecnico : "") : x.quem === "com" ? "Comissão técnica" : a ? "nº " + (a.num ?? "–") + " " + a.nome + capTag(e, a) : "?", e.nome, eqNome(j[x.l === "a" ? "b" : "a"]), j.faseNome || "", (x.set < 2 ? (x.set + 1) + "º set" : "Tiebreak") + " · " + (x.placar || "")]); }
       }));
-      const ordD = Object.values(porEq).sort((x, y) => y.vermelho - x.vermelho || y.amarelo - x.amarelo || x.nome.localeCompare(y.nome, "pt-BR"));
+      const ordD = Object.values(porEq).sort((x, y) => y.desq - x.desq || y.vermelho - x.vermelho || y.amarelo - x.amarelo || x.nome.localeCompare(y.nome, "pt-BR"));
+      const DQ = LIGA_CART || ordD.some(x => x.desq); // coluna "amarelo + vermelho" (fora da etapa)
       w.append(h("div", { class: "card" }, h("h3", { text: "Cartões e disciplina" }), h("p", { class: "cap", text: "Advertências, cartões e sanções por demora do filtro escolhido" }),
-        ordD.length ? [h("div", { class: "tablebox" }, h("table", { class: "t-tab" }, h("thead", null, h("tr", null, h("th", { class: "l", text: "Equipe" }), h("th", { text: "Advert." }), h("th", { text: "🟨" }), h("th", { text: "🟥" }), h("th", { text: "Demora" }))),
-          h("tbody", null, ordD.map(x => h("tr", null, h("td", { class: "l", text: x.nome }), h("td", { text: x.adv }), h("td", { text: x.amarelo }), h("td", { text: x.vermelho }), h("td", { text: x.advDemora + x.penDemora })))))),
+        ordD.length ? [h("div", { class: "tablebox" }, h("table", { class: "t-tab" }, h("thead", null, h("tr", null, h("th", { class: "l", text: "Equipe" }), h("th", { text: "Advert." }), h("th", { text: "🟨" }), h("th", { text: "🟥" }), DQ && h("th", { title: "Amarelo + vermelho juntos", text: "🟨🟥" }), h("th", { text: "Demora" }))),
+          h("tbody", null, ordD.map(x => h("tr", null, h("td", { class: "l", text: x.nome }), h("td", { text: x.adv }), h("td", { text: x.amarelo }), h("td", { text: x.vermelho }), DQ && h("td", { text: x.desq }), h("td", { text: x.advDemora + x.penDemora })))))),
           lista.length && h("div", { class: "tablebox" }, h("table", { class: "t-tab" }, h("thead", null, h("tr", null, ["Cartão", "Quem", "Equipe", "Adversário", "Fase", "Momento"].map((c, i) => h("th", { class: i < 4 ? "l" : null, text: c })))),
             h("tbody", null, lista.map(l => h("tr", null, l.map((v, i) => h("td", { class: (i < 4 ? "l" : "") + (i === 0 ? (v === "Amarelo" ? " t-am" : " t-vm") : "") || null, text: v }))))))) ]
           : h("p", { class: "cap", text: "Nenhuma sanção registrada." })));
-      rel.blocos.push({ t: "tabela", titulo: "Cartões por equipe", cab: ["Equipe", "Advertências", "Amarelos", "Vermelhos", "Demora"], linhas: ordD.map(x => [x.nome, x.adv, x.amarelo, x.vermelho, x.advDemora + x.penDemora]) });
+      rel.blocos.push({ t: "tabela", titulo: "Cartões por equipe", cab: ["Equipe", "Advertências", "Amarelos", "Vermelhos", ...(DQ ? ["Amarelo + Vermelho"] : []), "Demora"], linhas: ordD.map(x => [x.nome, x.adv, x.amarelo, x.vermelho, ...(DQ ? [x.desq] : []), x.advDemora + x.penDemora]) });
       rel.blocos.push({ t: "tabela", titulo: "Cartões aplicados", cab: ["Cartão", "Quem", "Equipe", "Adversário", "Fase", "Momento"], esq: [0, 1, 2, 3, 4], linhas: lista });
     }
     return w;

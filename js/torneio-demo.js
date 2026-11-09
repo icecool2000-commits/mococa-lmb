@@ -162,13 +162,13 @@ export function gerarDemo(esporte, nomeDemo, opts = {}) {
     const sets = (j.sets || []).filter(s2 => s2.a || s2.b), si = int(0, Math.max(0, sets.length - 1)), st = sets[si] || { a: 0, b: 0 };
     const pl = () => Math.max(0, Math.round(st.a * (0.2 + R() * 0.7))) + "-" + Math.max(0, Math.round(st.b * (0.2 + R() * 0.7)));
     const l = R() < 0.5 ? "a" : "b", eq = eqDe(j[l]), atl = () => eq.atletas[int(0, eq.atletas.length - 1)].id;
-    const sc = []; const add = (tipo, quem) => sc.push({ tipo, l, quem, set: si, placar: pl(), em: 0 });
+    const sc = []; const add = (tipo, quem) => sc.push({ tipo, l, quem, set: si, placar: pl(), em: 0, ...(opts.cartoesLiga ? { regra: "liga" } : {}) });
     if (x < 0.14) add("adv", atl());                                      // só advertência verbal
     else if (x < 0.22) { const q = atl(); add("adv", atl()); add("amarelo", q); }   // advertência e depois amarelo
     else if (x < 0.26) add("advDemora", "eq");                            // demora
     else if (x < 0.28) { add("advDemora", "eq"); add("penDemora", "eq"); }
     else if (x < 0.30) { const q = atl(); add("adv", atl()); add("amarelo", q); add("vermelho", q); } // amarelo e depois vermelho
-    else if (x < 0.31) add("vermelho", atl());                            // vermelho direto (agressão/ofensa)
+    else if (x < 0.31) add(opts.cartoesLiga ? "desq" : "vermelho", atl()); // vermelho direto / Liga: amarelo + vermelho juntos (fora da etapa)
     else { add("adv", "tec"); add("amarelo", "tec"); }                    // técnico advertido e punido
     // placares em ordem crescente (a advertência vem antes do cartão)
     const pls = sc.map(x => x.placar).sort((p1, p2) => p1.split("-").reduce((t, v) => t + +v, 0) - p2.split("-").reduce((t, v) => t + +v, 0));
