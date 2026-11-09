@@ -44,7 +44,11 @@ export function estado(rz, i) {
 // equipes na ordem em que estão na piscina (esquerda, direita) no set i; sem formação = ["a","b"]
 export function ordemLados(rz, i) {
   const e = rz && rz.sets && rz.sets[i] && rz.sets[i].pos ? estado(rz, i) : null;
-  return e && e.ladoA === "dir" ? ["b", "a"] : ["a", "b"];
+  if (e) return e.ladoA === "dir" ? ["b", "a"] : ["a", "b"];
+  // set novo ainda sem formação: as equipes já trocaram de lado em relação ao fim do set anterior
+  const ant = i > 0 && rz && rz.sets && rz.sets[i - 1] && rz.sets[i - 1].pos ? estado(rz, i - 1) : null;
+  if (ant) return ant.ladoA === "dir" ? ["a", "b"] : ["b", "a"];
+  return ["a", "b"];
 }
 // último set (até o índice "ate") que tem formação
 export function setComFormacao(rz, ate) {

@@ -802,10 +802,10 @@ export function montarTorneio(ctx) {
       h("button", { type: "button", class: "ghost t-mini", onclick: fechar }, "← Voltar"),
       h("span", { class: "cap", text: j.faseNome + " · " + (et.nome || "") }),
       h("span", { class: "t-pill" + (fim ? " ok" : j.status === "andamento" ? " and" : ""), text: fim ? "Encerrado" : j.status === "andamento" ? "Em andamento" : "Agendado" })));
-    painel.append(h("div", { class: "t-placar" },
-      h("div", { class: "t-pe" + (fim && r.venc === j.a ? " venc" : "") }, h("span", { text: eqNome(j.a) }), h("b", { text: BIR ? r.sa : r.pa })),
-      h("div", { class: "t-x", text: "x" }),
-      h("div", { class: "t-pe" + (fim && r.venc === j.b ? " venc" : "") }, h("span", { text: eqNome(j.b) }), h("b", { text: BIR ? r.sb : r.pb }))));
+    // placar no topo: no biribol com rodízio, cada equipe aparece do lado em que está na piscina
+    const ladoTopo = BIR && ROD ? R.ordemLados(j.rodizio, Math.max(0, (j.sets || []).length - 1)) : ["a", "b"];
+    const peTopo = l => h("div", { class: "t-pe" + (fim && r.venc === j[l] ? " venc" : "") }, h("span", { text: eqNome(j[l]) }), h("b", { text: BIR ? (l === "a" ? r.sa : r.sb) : (l === "a" ? r.pa : r.pb) }));
+    painel.append(h("div", { class: "t-placar" }, peTopo(ladoTopo[0]), h("div", { class: "t-x", text: "x" }), peTopo(ladoTopo[1])));
     if (fim) painel.append(h("p", { class: "t-res", text: r.empate ? "Empate" : "Vitória de " + eqNome(r.venc) + (j.periodos && j.periodos.some(p => p.n === "BO") ? " na bola de ouro" : j.periodos && j.periodos.some(p => /^P/.test(p.n)) ? " na prorrogação" : "") }));
     // rodízio (formação, saque, substituições e a piscina com os jogadores) logo abaixo do placar
     if (ROD && j.a && j.b && !j.wo) painel.append(R.painel({ h, j, nomeA: eqNome(j.a), nomeB: eqNome(j.b), ed, fim, toast, render,
@@ -903,7 +903,7 @@ export function montarTorneio(ctx) {
   function sumulaBiribol(painel, j, ed, fim) {
     const ia = j.sets.length - 1;
     painel.append(h("div", { class: "t-sets" }, j.sets.map((s, i) => h("div", { class: "t-set" + (i === ia && !fim ? " atual" : "") },
-      h("small", { text: i < 2 ? "Set " + (i + 1) + " · 21" : "Tiebreak · 15" }), h("b", { text: s.a + " - " + s.b })))));
+      h("small", { text: i < 2 ? "Set " + (i + 1) + " · 21" : "Tiebreak · 15" }), h("b", { text: (ROD && R.ordemLados(j.rodizio, ia)[0] === "b") ? s.b + " - " + s.a : s.a + " - " + s.b })))));
     if (ed && !fim) {
       const s = j.sets[ia];
       // a marcação acompanha o lado da piscina de cada equipe (rodízio)
