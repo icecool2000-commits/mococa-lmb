@@ -48,7 +48,9 @@ export function colocacao(e) {
   const naSerie = serie != null ? " da " + SERIES[serie] : "";
   let pos = null, texto = "";
   const man = e.posicao != null && e.posicao !== "" ? +e.posicao : null;
+  const auto = e.posAuto != null && e.posAuto !== "" ? +e.posAuto : null; // calculada na importação pela classificação da Liga
   if (man) { pos = man; texto = pos + "º lugar" + naSerie; }
+  else if (auto) { pos = auto; texto = pos + "º lugar" + naSerie; }
   else {
     const fin = ko.find(p => p.chave === "final"), ter = ko.find(p => p.chave === "terceiro");
     if (fin) { pos = resultado(fin).venceu ? 1 : 2; texto = pos + "º lugar" + naSerie; }

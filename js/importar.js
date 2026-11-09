@@ -62,11 +62,23 @@ export function montarEtapa(torneio, jogos, ei, eid, mapaIds) {
     Object.keys(p.stats).forEach(k => { const x = p.stats[k]; if (!x.p && !x.b && !x.as) delete p.stats[k]; });
     partidas.push(p);
   });
+  // colocação final pela classificação da própria Liga (resolve série em pontos corridos, onde só os jogos de Mococa não bastam)
+  let posAuto = null, posAutoTxt = null;
+  try {
+    T.definirRegra({ pontosSets: true }); // regra de pontos da Liga (2x0 = 3, 2x1 = 2 e 1)
+    const jsEt = jogos.filter(j => j.etapa === ei && !(j.wo && !j.b));
+    const ids = (torneio.equipes || []).map(e => e.id), col = T.colocacaoEtapa("biribol", et, jsEt, ids, nome);
+    const linha = col.ordem.find(r => r.eid === eid);
+    if (linha && si >= 0) {
+      const daSerie = jsEt.filter(j => j.serie === si);
+      if (daSerie.length && daSerie.every(j => j.status === "encerrado")) { posAuto = col.ordem.filter(r => r.serie === si).findIndex(r => r.eid === eid) + 1 || null; posAutoTxt = linha.rot || null; }
+    } else if (linha && col.completa && linha.medalha) { posAuto = linha.pos; posAutoTxt = linha.rot || null; }
+  } catch (e) { console.error(e); }
   const doTime = [...new Set(Object.values(mapaIds).filter(v => v && v !== "ignorar" && v !== "novo"))];
   return {
     id: "lmb-" + torneio.id + "-" + ei,
     etapa: { nome: (et.nome || "Etapa") + " · " + (torneio.nome || "Liga"), temporada: et.data ? +et.data.slice(0, 4) : new Date().getFullYear(), local: et.local || "", data: et.data || "", hora: et.hora || "",
-      status: "realizada", posGrupo, serie: si >= 0 ? si : null, origem: { torneio: torneio.id, etapa: ei, equipe: eid, nomeTorneio: torneio.nome || "" } },
+      status: "realizada", posGrupo, serie: si >= 0 ? si : null, posAuto, posAutoTxt, origem: { torneio: torneio.id, etapa: ei, equipe: eid, nomeTorneio: torneio.nome || "" } },
     partidas, pendentes, atletas: usados.size ? [...usados] : doTime, grupo: gi >= 0 ? T.letraGrupo(gi) : null
   };
 }
