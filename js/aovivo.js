@@ -4,6 +4,7 @@
 // placar.html?app={app} é o placar transparente para OBS / Streamlabs / Prism (lê o mesmo documento).
 import * as C from "./torneio-core.js";
 import * as R from "./rodizio.js";
+import * as BQ from "./basquete.js";
 
 const dataHora = ms => { if (!ms) return ""; const d = new Date(ms), p = n => String(n).padStart(2, "0"); return p(d.getDate()) + "/" + p(d.getMonth() + 1) + "/" + d.getFullYear() + " " + p(d.getHours()) + ":" + p(d.getMinutes()); };
 
@@ -224,9 +225,29 @@ export function montarAoVivo(ctx) {
       !p.fim && !p.wo && h("div", { class: "av-atual" }, h("span", { text: p.atual[0] }), h("small", { text: p.rotAtual }), h("span", { text: p.atual[1] })),
       p.parciais.length > 0 && h("p", { class: "cap t-centro", text: (esporte === "biribol" ? "Sets: " : "") + p.parciais.join(" · ") }),
       rodizioVivo(nA, nB),
+      mesaVivo(nA, nB),
       !MANUAL && ctx.abrirSumula && ctx.torneioId && ctx.torneioId() === E.torneioId && h("button", { type: "button", class: "ghost", onclick: () => ctx.abrirSumula(E.jogoId) }, podeEditar() ? "Abrir súmula (marcar pontos)" : "Ver súmula"));
   }
 
+  // basquete: quadra com quem está em quadra, faltas, posse alternada, relógios e tempos (vem da mesa da súmula)
+  function mesaVivo(nA, nB) {
+    if (esporte === "biribol" || !jogo || !jogo.mesa) return null;
+    const est = BQ.estado(jogo); if (!est) return null;
+    const T = ctx.torneio ? ctx.torneio() : null, eqs = (T && T.equipes) || [], eq = id => eqs.find(e => e.id === id) || {};
+    const num = id => { for (const e of eqs) { const a = (e.atletas || []).find(x => x.id === id); if (a) return a.num; } return null; };
+    const ra = BQ.relogioAgora(jogo.mesa), nomes = { a: nA, b: nB };
+    const linha = l => { const fe = BQ.faltasEquipe(est, l), td = BQ.temposDisponiveis(est, l, est.q, ra ? ra.rest : null);
+      return h("div", { class: "bq-lin", style: "--c:" + BQ.CORES[l].c }, h("span", { text: nomes[l] }), h("span", { class: "bq-dots" }, [0, 1, 2, 3, 4].map(i => h("i", { class: i < fe ? (i >= 4 ? "on pen" : "on") : "" }))),
+        h("b", { class: fe >= 4 ? "bq-pen" : "", text: fe >= 4 ? "PENALIDADE" : fe + " falta(s)" }), h("small", { text: "· " + td + " tempo(s)" })); };
+    return h("div", { class: "rz bq rz-vivo" },
+      h("div", { class: "bq-rel" }, h("div", { class: "bq-relj" }, h("small", { text: BQ.nomeQ(est.q) }), h("b", { class: "av-rel", "data-r": "j", text: ra ? BQ.fmtRel(ra.rest) : "–" })),
+        h("div", { class: "bq-rel24" }, h("small", { text: "Posse" }), h("b", { class: "av-rel", "data-r": "p", text: ra ? ra.p : "–" }))),
+      h("div", { class: "rz-box bq-box" }, BQ.quadra({ est, num, nomes, capitaes: { a: eq(jogo.a).capitao, b: eq(jogo.b).capitao } })),
+      h("div", { class: "bq-eq" }, linha("a"), linha("b"), est.seta && h("p", { class: "cap", text: "Posse alternada: " + nomes[est.seta] })));
+  }
+  // relógios da mesa andando na tela de quem assiste
+  setInterval(() => { if (!jogo || !jogo.mesa) return; const els = document.querySelectorAll(".av-rel"); if (!els.length) return; const ra = BQ.relogioAgora(jogo.mesa); if (!ra) return;
+    els.forEach(e => { e.textContent = e.dataset.r === "j" ? BQ.fmtRel(ra.rest) : ra.p; }); }, 1000);
   // piscina com o rodízio (quando o mesário cadastrou a formação na súmula)
   function rodizioVivo(nA, nB) {
     const rz = jogo && jogo.rodizio; if (!rz || esporte !== "biribol") return null;

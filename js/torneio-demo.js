@@ -49,6 +49,7 @@ export function gerarDemo(esporte, nomeDemo, opts = {}) {
       const v = valores ? Math.min(resta, valores[Math.floor(R() * valores.length)]) : 1;
       const x = st[alvo.id] || (st[alvo.id] = { p: 0, b: 0, as: 0 });
       x.p += v; resta -= v;
+      if (!BIR) x["c" + v] = (x["c" + v] || 0) + 1; // cestas de 3, de 2 e lances livres
     }
   }
   const eqDe = id => equipes.find(e => e.id === id);
@@ -134,7 +135,9 @@ export function gerarDemo(esporte, nomeDemo, opts = {}) {
         if (fora(quem)) { const banco = ats[l].filter(id => !quadra[l].includes(id) && !fora(id)); if (banco.length) { const entra = pick(banco); quadra[l][quadra[l].indexOf(quem)] = entra; ev.push({ t: "s", l, sai: quem, entra, q }); } }
       });
     });
-    function llLances(l, aid, n, q) { for (let i = 0; i < n; i++) { const pode = (st[aid] ? st[aid].p : 0) - (llUsado[aid] || 0) > 0, ok = pode && R() < 0.72; if (ok) llUsado[aid] = (llUsado[aid] || 0) + 1; ev.push({ t: "ll", l, aid, ok, q }); } }
+    function llLances(l, aid, n, q) { for (let i = 0; i < n; i++) { const pode = (st[aid] ? st[aid].c1 || 0 : 0) - (llUsado[aid] || 0) > 0, ok = pode && R() < 0.72; if (ok) llUsado[aid] = (llUsado[aid] || 0) + 1; ev.push({ t: "ll", l, aid, ok, q }); } }
+    // lances livres convertidos que ainda não apareceram na mesa (a súmula e a mesa ficam iguais)
+    Object.entries(st).forEach(([aid, x]) => { let falta = (x.c1 || 0) - (llUsado[aid] || 0); const l = ats.a.includes(aid) ? "a" : "b"; while (falta-- > 0) ev.push({ t: "ll", l, aid, ok: true, q: pick(qs) }); });
     j.mesa = { q: qs[qs.length - 1] || "4Q", ini, salto, ev, pend: null };
   }
 

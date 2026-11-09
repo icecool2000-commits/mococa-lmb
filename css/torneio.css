@@ -405,3 +405,6 @@ td.t-am{color:#b38900;font-weight:700}td.t-vm{color:#e0282e;font-weight:700}
 .bq-li.f.tU,.bq-li.f.tD{background:rgb(224 40 46 / .1)}
 .bq-mf{display:inline-flex;align-items:center;gap:5px;margin-left:6px}
 .bq-llat{color:var(--muted)}
+.t-cestas{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--muted);grid-column:1/-1}
+.t-cestas b{color:var(--fg);font-size:14px}
+.t-cestas .c3 b{color:#ec6a2c}

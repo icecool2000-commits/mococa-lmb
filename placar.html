@@ -42,12 +42,22 @@ body.baixo{justify-content:flex-end}
 .rz-anel{animation:rzpulsa 1.4s ease-in-out infinite}
 @keyframes rzpulsa{50%{stroke-opacity:.35}}
 body.so-rz #bug,body.so-rz #faixa{display:none!important}
+/* basquete com mesa: posse alternada, faltas de equipe e tempos em cada linha; relógio na etiqueta */
+.bx{display:none;align-items:center;gap:8px;padding:0 12px;height:100%;font-weight:800;font-size:15px;color:#fff;background:rgba(255,255,255,.08);white-space:nowrap}
+body.mesa .bx{display:flex}
+.bx .pos{width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;border-right:12px solid var(--destaque);visibility:hidden}
+.bx .pos.on{visibility:visible}
+.bx .fe{min-width:52px;text-align:center;padding:2px 6px;border-radius:5px;background:rgba(255,255,255,.14)}
+.bx .fe.pen{background:#e0282e}
+.bx .to{display:flex;gap:3px}.bx .to i{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25)}.bx .to i.on{background:var(--destaque)}
+.rel{font-family:Anton,Impact,sans-serif;font-size:17px;letter-spacing:.04em;margin-left:8px}
+.rel24{display:inline-block;min-width:26px;text-align:center;margin-left:6px;padding:0 5px;border-radius:4px;background:#111;color:#ff9a3d;font-family:Anton,Impact,sans-serif}
 </style>
 </head>
 <body>
 <div id="bug"><div class="corpo"><div class="logo"><img id="logo" alt=""></div><div class="linhas">
-  <div class="lin" id="la"><span class="nome" id="na"></span><span class="sets" id="sa"></span><span class="pts" id="pa"></span></div>
-  <div class="lin" id="lb"><span class="nome" id="nb"></span><span class="sets" id="sb"></span><span class="pts" id="pb"></span></div>
+  <div class="lin" id="la"><span class="nome" id="na"></span><span class="bx" id="xa"></span><span class="sets" id="sa"></span><span class="pts" id="pa"></span></div>
+  <div class="lin" id="lb"><span class="nome" id="nb"></span><span class="bx" id="xb"></span><span class="sets" id="sb"></span><span class="pts" id="pb"></span></div>
 </div></div><div class="tag" id="tag"></div></div>
 <div id="rz"></div>
 <div id="faixa"><div class="logo"><img id="logo2" alt=""></div><div class="txt"><small id="f1"></small><b id="f2"></b></div></div>
@@ -58,6 +68,7 @@ import { firebaseConfig } from "./config.js";
 let core; try { core = await import("./torneio-core.js"); } catch (e) { core = await import("./js/torneio-core.js"); }
 let av; try { av = await import("./aovivo.js"); } catch (e) { av = await import("./js/aovivo.js"); }
 let R; try { R = await import("./rodizio.js"); } catch (e) { R = await import("./js/rodizio.js"); }
+let BQ; try { BQ = await import("./basquete.js"); } catch (e) { BQ = await import("./js/basquete.js"); }
 const q = new URLSearchParams(location.search), APP = q.get("app") || "biribol";
 if (q.get("pos") === "baixo") document.body.classList.add("baixo");
 if (q.get("compacto") === "1") document.body.classList.add("compacto");
@@ -112,9 +123,23 @@ function pintar() {
   $("la").classList.toggle("venc", !!(p.fim && J && p.venc === J.a)); $("lb").classList.toggle("venc", !!(p.fim && J && p.venc === J.b));
   const tag = $("tag"); tag.textContent = "";
   if (!p.fim) { const v = document.createElement("span"); v.className = "vivo"; v.textContent = "AO VIVO"; tag.append(v); }
-  tag.append([p.fim ? "Final do jogo" : esp === "biribol" ? p.rotAtual : p.rotAtual + " · " + (p.atual[0]) + "-" + (p.atual[1]), E.rotulo].filter(Boolean).join(" · "));
+  // basquete com mesa: seta de posse, faltas de equipe (PENALIDADE a partir da 5ª), tempos e relógios
+  const est = esp !== "biribol" && J && J.mesa && !p.fim ? BQ.estado(J) : null, ra = est ? BQ.relogioAgora(J.mesa) : null;
+  document.body.classList.toggle("mesa", !!est);
+  if (est) ["a", "b"].forEach(l => {
+    const x = $("x" + l); x.textContent = "";
+    const pos = document.createElement("span"); pos.className = "pos" + (est.seta === l ? " on" : ""); pos.title = "Posse alternada";
+    const fe = BQ.faltasEquipe(est, l), f = document.createElement("span"); f.className = "fe" + (fe >= 4 ? " pen" : ""); f.textContent = fe >= 4 ? "BÔNUS" : "F " + fe;
+    const td = BQ.temposDisponiveis(est, l, est.q, ra ? ra.rest : null), mx = BQ.temposMax(est.q), to = document.createElement("span"); to.className = "to"; to.title = "Tempos restantes";
+    for (let i = 0; i < mx; i++) { const b = document.createElement("i"); if (i < td) b.className = "on"; to.append(b); }
+    x.append(pos, f, to);
+  });
+  tag.append([p.fim ? "Final do jogo" : esp === "biribol" ? p.rotAtual : est ? BQ.nomeQ(est.q) : p.rotAtual + " · " + (p.atual[0]) + "-" + (p.atual[1]), E.rotulo].filter(Boolean).join(" · "));
+  if (ra) { const c = document.createElement("span"); c.className = "rel"; c.id = "relj"; c.textContent = BQ.fmtRel(ra.rest); const c2 = document.createElement("span"); c2.className = "rel24"; c2.id = "rel24"; c2.textContent = ra.p; tag.append(c, c2); }
   bug.classList.add("on");
 }
+// relógios da mesa do basquete andando sozinhos (o app só grava ao iniciar/parar)
+setInterval(() => { if (!J || !J.mesa || !$("relj")) return; const ra = BQ.relogioAgora(J.mesa); if (!ra) return; $("relj").textContent = BQ.fmtRel(ra.rest); $("rel24").textContent = ra.p; }, 1000);
 // simulação automática: os pontos saem pelo relógio, sem depender do app estar aberto
 let passos = -1;
 setInterval(() => { if (!E || !E.aoVivo || !E.simAuto) return; const n = av.simPassos(E, Date.now()); if (n !== passos) { passos = n; pintar(); } }, 1000);

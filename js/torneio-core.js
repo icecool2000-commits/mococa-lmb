@@ -187,8 +187,9 @@ export function ordenarQualificados(porGrupo /* [[rows classificados do grupo]] 
 export function statsAtletas(jogos) {
   const s = {};
   jogos.forEach(j => Object.entries(j.stats || {}).forEach(([aid, v]) => {
-    const x = s[aid] || (s[aid] = { p: 0, b: 0, as: 0, jogos: 0 });
+    const x = s[aid] || (s[aid] = { p: 0, b: 0, as: 0, jogos: 0, c1: 0, c2: 0, c3: 0 });
     x.p += v.p || 0; x.b += v.b || 0; x.as += v.as || 0; x.jogos++;
+    x.c1 += v.c1 || 0; x.c2 += v.c2 || 0; x.c3 += v.c3 || 0; // basquete: lances livres, cestas de 2 e de 3
   }));
   return s;
 }

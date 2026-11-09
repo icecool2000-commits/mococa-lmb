@@ -133,10 +133,21 @@ const pad = n => String(n).padStart(2, "0");
 function tick24(o) {
   posse.rest = Math.max(0, posse.rest - 1);
   const v = document.getElementById("bq-24-v"); if (v) { v.textContent = posse.rest; v.classList.toggle("alerta", posse.rest <= 5); }
-  if (!posse.rest) { pararRelogios(o); o.toast("Violação de 24 segundos: posse para o adversário."); o.render(); }
+  if (!posse.rest) { pararRelogios(o); o.toast("Violação de 24 segundos: posse para o adversário."); o.salvar(); }
 }
-function iniciarRelogios(o) { o.cron.iniciar(); if (!posse.rodando) { posse.rodando = true; posse.t = setInterval(() => tick24(o), 1000); } }
-function pararRelogios(o) { o.cron.parar(); posse.rodando = false; clearInterval(posse.t); }
+function iniciarRelogios(o) { o.cron.iniciar(); if (!posse.rodando) { posse.rodando = true; posse.t = setInterval(() => tick24(o), 1000); } marcarRel(o); }
+function pararRelogios(o) { o.cron.parar(); posse.rodando = false; clearInterval(posse.t); marcarRel(o); }
+// guarda os relógios no jogo (só ao iniciar/parar/zerar) para a aba Ao vivo e o placar da live contarem sozinhos
+function marcarRel(o) { if (o.j && o.j.mesa) o.j.mesa.rel = { rest: o.cron.rest, rod: !!o.cron.rodando, p: posse.rest, em: Date.now() }; }
+// relógios agora (para quem só assiste): { rest, p, rod }
+export function relogioAgora(m, agora) {
+  const r = m && m.rel; if (!r) return null;
+  const d = r.rod ? Math.floor(((agora || Date.now()) - r.em) / 1000) : 0;
+  return { rest: Math.max(0, r.rest - d), p: Math.max(0, r.p - d), rod: !!r.rod && r.rest - d > 0 };
+}
+// ao abrir a súmula de novo (outro aparelho ou recarregou): relógios voltam ao valor salvo
+export function restaurar(m) { const r = relogioAgora(m); if (r) posse.rest = r.p; return r; }
+export const fmtRel = s => pad(Math.floor(s / 60)) + ":" + pad(s % 60);
 export function pararTudo() { posse.rodando = false; clearInterval(posse.t); }
 
 /* ---------------- desenho da quadra (SVG) ---------------- */
@@ -223,7 +234,7 @@ export function painel(o) {
       h("div", { class: "chips" }, ["a", "b"].map(l => h("button", { type: "button", "aria-pressed": String(iniF.salto === l), onclick: () => { iniF.salto = l; o.render(); } }, nomes[l]))),
       h("button", { type: "button", disabled: !okN || !iniF.salto, onclick: () => {
         j.mesa = { q: "1Q", ini: { a: [...iniF.a], b: [...iniF.b] }, salto: iniF.salto, ev: [], pend: null };
-        iniF = null; o.cron.definir(600); o.irPeriodo("1Q"); o.toast("Mesa pronta. A seta de posse alternada fica com " + nomes[outro(j.mesa.salto)] + "."); o.salvar();
+        iniF = null; o.cron.definir(600); o.irPeriodo("1Q"); posse.rest = 24; marcarRel(o); o.toast("Mesa pronta. A seta de posse alternada fica com " + nomes[outro(j.mesa.salto)] + "."); o.salvar();
       } }, "Começar o jogo"));
     return w;
   }
@@ -274,9 +285,9 @@ export function painel(o) {
       h("div", { class: "bq-relj" }, h("small", { text: nomeQ(q) }), h("b", { id: "t-cron-v", text: pad(Math.floor(o.cron.rest / 60)) + ":" + pad(o.cron.rest % 60) })),
       h("div", { class: "bq-rel24" }, h("small", { text: "Posse" }), h("b", { id: "bq-24-v", class: posse.rest <= 5 ? "alerta" : "", text: posse.rest })),
       h("div", { class: "bq-relb" },
-        h("button", { type: "button", onclick: () => { o.cron.rodando ? pararRelogios(o) : iniciarRelogios(o); o.render(); } }, o.cron.rodando ? "⏸ Parar" : "▶ Iniciar"),
-        h("button", { type: "button", class: "ghost t-mini", onclick: () => { posse.rest = 24; o.render(); } }, "24"),
-        h("button", { type: "button", class: "ghost t-mini", onclick: () => { posse.rest = 14; o.render(); } }, "14"))));
+        h("button", { type: "button", onclick: () => { o.cron.rodando ? pararRelogios(o) : iniciarRelogios(o); o.salvar(); } }, o.cron.rodando ? "⏸ Parar" : "▶ Iniciar"),
+        h("button", { type: "button", class: "ghost t-mini", onclick: () => { posse.rest = 24; marcarRel(o); o.salvar(); } }, "24"),
+        h("button", { type: "button", class: "ghost t-mini", onclick: () => { posse.rest = 14; marcarRel(o); o.salvar(); } }, "14"))));
   }
   // posse alternada
   w.append(h("div", { class: "bq-seta" + (est.seta ? " " + est.seta : "") },
@@ -380,13 +391,13 @@ function fimDoQuarto(o, est) {
   const pa = (o.j.periodos || []).reduce((t, p) => t + (p.a || 0), 0), pb = (o.j.periodos || []).reduce((t, p) => t + (p.b || 0), 0);
   pararRelogios(o); posse.rest = 24;
   if (i >= 0 && i < 3) {
-    m.q = ORDEM_Q[i + 1]; o.cron.definir(600); o.irPeriodo(m.q);
+    m.q = ORDEM_Q[i + 1]; o.cron.definir(600); o.irPeriodo(m.q); marcarRel(o);
     o.toast("Fim do " + nomeQ(q) + ". " + (q === "2Q" ? "Intervalo de 15 minutos." : "Intervalo de 2 minutos.") + " Faltas de equipe zeradas. " + (est.seta ? "O " + nomeQ(m.q) + " começa com reposição alternada para " + (est.seta === "a" ? o.nomeA : o.nomeB) + "." : ""));
     o.salvar(); return;
   }
   if (pa === pb) {
     const n = "P" + ((o.j.periodos || []).filter(p => /^P/.test(p.n)).length + 1);
-    m.q = n; o.cron.definir(300); o.irPeriodo(n, true);
+    m.q = n; o.cron.definir(300); o.irPeriodo(n, true); marcarRel(o);
     o.toast("Empate: prorrogação de 5 minutos (intervalo de 2 min). As faltas de equipe continuam as do 4º quarto." + (est.seta ? " Reposição alternada para " + (est.seta === "a" ? o.nomeA : o.nomeB) + "." : ""));
     o.salvar(); return;
   }

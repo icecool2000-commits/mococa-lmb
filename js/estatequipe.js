@@ -66,7 +66,7 @@ export function calcular(esporte, dados, chave) {
         Object.entries(j.stats || {}).forEach(([aid, st]) => {
           if (!meus.has(aid)) return;
           const a = (eq.atletas || []).find(x => x.id === aid); const x = S.atl[chaveNome(a.nome)];
-          x.p += st.p || 0; x.b += st.b || 0; x.as += st.as || 0; if ((st.p || 0) + (st.b || 0) + (st.as || 0) > 0) x.j++;
+          x.p += st.p || 0; x.b += st.b || 0; x.as += st.as || 0; x.c3 = (x.c3 || 0) + (st.c3 || 0); x.c2 = (x.c2 || 0) + (st.c2 || 0); x.c1 = (x.c1 || 0) + (st.c1 || 0); if ((st.p || 0) + (st.b || 0) + (st.as || 0) > 0) x.j++;
         });
         // basquete: mesa (faltas, lances livres, tempos)
         const MS = !BIR && j.mesa ? resumoMesa(j) : null;
@@ -110,6 +110,8 @@ export function spec(esporte, S, titulo) {
   if (BIR) quad.push(["Tiebreaks", S.tb, S.tb ? S.tbV + " vencidos" : ""], ["Vitórias por 2x0", S.v20, ""], ["Derrotas por 0x2", S.d02, ""]);
   if (BIR) { const dq = S.cart.desq || 0; quad.push(["Cartões", S.cart.amarelo + S.cart.vermelho + dq, S.cart.amarelo + " amarelo(s) · " + S.cart.vermelho + " vermelho(s) · " + (dq ? dq + " amarelo + vermelho · " : "") + S.cart.adv + " advertência(s)"]); }
   const M = S.mesa, MM = !BIR && M.jogos > 0;
+  const tc = k => Object.values(S.atl).reduce((t, a) => t + (a[k] || 0), 0), C3 = tc("c3"), C2 = tc("c2"), C1 = tc("c1");
+  if (!BIR && C3 + C2 + C1) quad.push(["Cestas de 3", C3, C3 * 3 + " pontos" + (S.j ? " · " + f1(C3 / S.j) + " por jogo" : "")], ["Cestas de 2", C2, C2 * 2 + " pontos"], ["Lances livres convertidos", C1, C1 + " pontos"]);
   if (MM) quad.push(["Faltas", M.f, f1(M.f / M.jogos) + " por jogo" + (M.T + M.U + M.D ? " · " + [M.T && M.T + " técnica(s)", M.U && M.U + " antidesportiva(s)", M.D && M.D + " desqualificante(s)"].filter(Boolean).join(" · ") : "")],
     ["Lances livres", M.llc + "/" + M.llt, M.llt ? pct(M.llc / M.llt) + " de aproveitamento" : ""], ["Tempos pedidos", M.tempos, f1(M.tempos / M.jogos) + " por jogo"],
     ["Técnico/banco", M.tec, "faltas técnicas" + (M.exc ? " · " + M.exc + " atleta(s) fora por 5 faltas/desq." : "")]);
@@ -126,8 +128,8 @@ export function spec(esporte, S, titulo) {
       linhas: S.etapas.map(l => [l.tnome + " · " + l.enome, l.data ? l.data.split("-").reverse().join("/") : "", l.j, l.v, l.d, ...(BIR && S.pts ? [l.pts] : []), l.pf, l.pc, sinal(l.pf - l.pc), colTxt(l.col)]) },
     { t: "tabela", titulo: "Desempenho por fase", cab: ["Fase", "J", "V", "D", "%", "PF", "PT", "Saldo"], linhas: fases.map(([f, x]) => [f, x.j, x.v, x.d, pct(x.j ? x.v / x.j : 0), x.pf, x.pc, sinal(x.pf - x.pc)]) },
     { t: "tabela", titulo: "Confrontos", cab: ["Adversário", "J", "V", "D", ...(BIR ? ["Sets"] : []), "PF", "PT", "Saldo"], linhas: advs.map(a => [a.nome, a.j, a.v, a.d, ...(BIR ? [a.sv + "–" + a.sp] : []), a.pf, a.pc, sinal(a.pf - a.pc)]) },
-    { t: "tabela", titulo: "Atletas", cab: ["Atleta", "Nº", "Jogos c/ estat.", "Pontos", BIR ? "Bloqueios" : "Tocos", "Assist.", "Média (pts/jogo da equipe)", ...(BIR ? ["Amarelos", "Vermelhos"] : []), ...(MM ? ["Faltas", "Lances livres"] : [])],
-      linhas: atl.map(a => [a.nome + (a.cap ? " (C)" : ""), a.num ?? "", a.j, a.p, a.b, a.as, a.jEq ? f1(a.p / a.jEq) : "–", ...(BIR ? [a.am, a.vm] : []), ...(MM ? [a.f, a.llt ? a.llc + "/" + a.llt + " (" + pct(a.llc / a.llt) + ")" : "–"] : [])]) },
+    { t: "tabela", titulo: "Atletas", cab: ["Atleta", "Nº", "Jogos c/ estat.", "Pontos", BIR ? "Bloqueios" : "Tocos", "Assist.", "Média (pts/jogo da equipe)", ...(BIR ? [] : ["De 3", "De 2", "LL"]), ...(BIR ? ["Amarelos", "Vermelhos"] : []), ...(MM ? ["Faltas", "Lances livres"] : [])],
+      linhas: atl.map(a => [a.nome + (a.cap ? " (C)" : ""), a.num ?? "", a.j, a.p, a.b, a.as, a.jEq ? f1(a.p / a.jEq) : "–", ...(BIR ? [] : [a.c3 || 0, a.c2 || 0, a.c1 || 0]), ...(BIR ? [a.am, a.vm] : []), ...(MM ? [a.f, a.llt ? a.llc + "/" + a.llt + " (" + pct(a.llc / a.llt) + ")" : "–"] : [])]) },
     { t: "tabela", titulo: "Jogos", cab: ["Torneio · etapa", "Fase", "Adversário", "Resultado", "Placar", ...(BIR ? ["Sets"] : [])], esq: [0, 2],
       linhas: S.jogos.map(g => [g.tnome + " · " + g.enome, g.fase, g.adv, g.emp ? "Empate" : g.venceu ? "Vitória" : "Derrota", g.placar, ...(BIR ? [g.parciais] : [])]) }
   ] };

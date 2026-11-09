@@ -793,7 +793,9 @@ export function montarTorneio(ctx) {
   }
 
   /* ---------- súmula ---------- */
-  function abrirSumula(jid) { sumulaJid = jid; sumulaLocal = JSON.parse(JSON.stringify(jogos.find(j => j.id === jid))); modoCorrigir = false; periodoSel = (sumulaLocal && sumulaLocal.mesa && sumulaLocal.mesa.q) || null; render(); }
+  function abrirSumula(jid) { sumulaJid = jid; sumulaLocal = JSON.parse(JSON.stringify(jogos.find(j => j.id === jid))); modoCorrigir = false; periodoSel = (sumulaLocal && sumulaLocal.mesa && sumulaLocal.mesa.q) || null;
+    if (MESA && sumulaLocal && sumulaLocal.mesa) { pararCron(); BQ.pararTudo(); const r = BQ.restaurar(sumulaLocal.mesa); if (r) cron.rest = r.rest; }
+    render(); }
   let modoCorrigir = false, ladoSel = "a", somaPlacar = true, periodoSel = null, cron = { rest: 600, rodando: false, t: null };
 
   function salvarSumula(imediato) {
@@ -866,6 +868,9 @@ export function montarTorneio(ctx) {
           cartoes(a.id).map(t => h("span", { class: "t-cartao " + t, title: TIT_C[t] })), MESA && j.mesa && BQ.marcadorFaltas(h, j, a.id),
           LIGA_CART && (R.desqualificadoFora(a.id) || (j.sancoes || []).some(x => x.tipo === "desq" && x.quem === a.id)) && h("span", { class: "t-fora", title: "Amarelo + vermelho juntos: só volta na próxima etapa", text: "fora da etapa" })),
         h("div", { class: "t-sanum" }, h("span", null, h("b", { text: s.p }), " pts"), h("span", null, h("b", { text: s.b }), BIR ? " blq" : " toco"), h("span", null, h("b", { text: s.as }), " ast")),
+        !BIR && h("div", { class: "t-cestas", title: "Cestas de 3, cestas de 2 e lances livres convertidos" },
+          h("span", { class: "c3" }, h("b", { text: s.c3 || 0 }), " de 3"), h("span", { class: "c2" }, h("b", { text: s.c2 || 0 }), " de 2"),
+          h("span", { class: "c1" }, h("b", { text: s.c1 || 0 }), " LL" + (MESA && j.mesa ? (() => { const e = BQ.estado(j), x = e && e.ll[a.id]; return x ? " (" + x.c + "/" + x.t + ")" : ""; })() : ""))),
         ed && !fim && h("div", { class: "t-sabtns" },
           BIR ? btn("+Ponto", () => marcarPonto(a.id, 1)) : [btn("+1", () => marcarPonto(a.id, 1)), btn("+2", () => marcarPonto(a.id, 2)), btn("+3", () => marcarPonto(a.id, 3))],
           btn(BIR ? "+Bloq" : "+Toco", () => marcarStat(a.id, "b"), "sec"), btn("+Assist", () => marcarStat(a.id, "as"), "sec"))));
@@ -895,17 +900,20 @@ export function montarTorneio(ctx) {
     const d = modoCorrigir ? -v : v;
     if (s.p + d < 0) return;
     if (BIR) { if (somaPlacar && !pontoEquipe(lado, d, true)) return; }
-    else { if (!pontoEquipe(lado, d, true)) return; }
+    else { if (!pontoEquipe(lado, d, true)) return; contarCesta(s, d); }
     s.p += d;
     if (j.status === "agendado") j.status = "andamento";
     salvarSumula();
   }
 
+  // basquete: conta as cestas por valor (c3 = de 3, c2 = de 2, c1 = lance livre convertido)
+  function contarCesta(s, d) { const k = "c" + Math.abs(d); if (Math.abs(d) >= 1 && Math.abs(d) <= 3) s[k] = Math.max(0, (s[k] || 0) + Math.sign(d)); }
   // ponto de atleta com valor explícito (mesa do basquete: cesta + 1, lance livre, desfazer)
   function pontoAtleta(aid, d) {
     const j = sumulaLocal, a = atletaDe(aid); if (!a) { salvarSumula(true); return; }
     const lado = a.eid === j.a ? "a" : "b", s = j.stats[aid] || (j.stats[aid] = { p: 0, b: 0, as: 0 });
     if (s.p + d < 0 || !pontoEquipe(lado, d, true)) { salvarSumula(true); return; }
+    if (!BIR) contarCesta(s, d);
     s.p += d; if (j.status === "agendado") j.status = "andamento";
     salvarSumula(true);
   }
@@ -1074,7 +1082,7 @@ export function montarTorneio(ctx) {
       h("h3", { text: "Pontuação por equipe" }),
       h("select", { "aria-label": "Equipe", class: "t-sel-eq", onchange: e => { equipeSel = e.target.value; render(); } }, T.equipes.map(e => h("option", { value: e.id, selected: e.id === equipeSel }, e.nome))),
       h("p", { class: "cap", text: "Do maior para o menor pontuador · " + (BIR ? "blq = bloqueios" : "toco") + ", ast = assistências" }),
-      barrasH(daEq.map((a, i) => ({ nome: (a.num != null ? "#" + a.num + " " : "") + a.nome, v: a.p, extra: a.b + (BIR ? " blq · " : " toco · ") + a.as + " ast", hi: i === 0 && a.p > 0 })), "Sem atletas cadastrados.")));
+      barrasH(daEq.map((a, i) => ({ nome: (a.num != null ? "#" + a.num + " " : "") + a.nome, v: a.p, extra: (BIR ? "" : (a.c3 || 0) + "×3 · " + (a.c2 || 0) + "×2 · " + (a.c1 || 0) + " LL · ") + a.b + (BIR ? " blq · " : " toco · ") + a.as + " ast", hi: i === 0 && a.p > 0 })), "Sem atletas cadastrados.")));
     const comJogo = todosAtl.filter(a => jogaram.has(a.eid));
     const top10 = [...comJogo].sort((x, y) => y.p - x.p || x.nome.localeCompare(y.nome, "pt-BR")).slice(0, 10);
     const bot10 = [...comJogo].sort((x, y) => x.p - y.p || x.nome.localeCompare(y.nome, "pt-BR")).slice(0, 10);
@@ -1082,6 +1090,7 @@ export function montarTorneio(ctx) {
     relBar("10 maiores pontuadores", "Geral do filtro escolhido", top10.map(lin)); relBar("10 menores pontuadores", "Entre atletas de equipes que jogaram", bot10.map(lin));
     w.append(h("div", { class: "card" }, h("h3", { text: "10 maiores pontuadores" }), h("p", { class: "cap", text: "Geral do filtro escolhido" }), barrasH(top10.map((a, i) => ({ ...lin(a), hi: i === 0 && a.p > 0 })), "Sem dados ainda.")));
     w.append(h("div", { class: "card" }, h("h3", { text: "10 menores pontuadores" }), h("p", { class: "cap", text: "Entre atletas de equipes que jogaram" }), barrasH(bot10.map(lin), "Sem dados ainda.", true)));
+    if (!BIR) statsCestas(w, rel, js, todosAtl, relBar);
     if (!BIR) statsMesa(w, rel, js, todosAtl, relBar);
     // pontos das equipes por fase
     const fasesTab = [...new Set(js.map(faseDe))].sort((a, b) => ordemF.indexOf(a) - ordemF.indexOf(b));
@@ -1147,6 +1156,27 @@ export function montarTorneio(ctx) {
     return w;
   }
 
+  // basquete: cestas de 3, de 2 e lances livres (por atleta e por equipe)
+  function statsCestas(w, rel, js, todosAtl, relBar) {
+    const comC = todosAtl.filter(a => (a.c1 || 0) + (a.c2 || 0) + (a.c3 || 0) > 0);
+    if (!comC.length) return;
+    const E = {};
+    comC.forEach(a => { const y = E[a.eid] || (E[a.eid] = { nome: a.enome, c3: 0, c2: 0, c1: 0 }); y.c3 += a.c3 || 0; y.c2 += a.c2 || 0; y.c1 += a.c1 || 0; });
+    const jogosEq = id => js.filter(j => j.a === id || j.b === id).length || 1, f1 = v => (Math.round(v * 10) / 10).toFixed(1).replace(".", ",");
+    const cab = ["Equipe", "Cestas de 3", "Pontos de 3", "Cestas de 2", "Pontos de 2", "Lances livres", "3 por jogo"];
+    const linhas = Object.entries(E).sort((x, y) => y[1].c3 - x[1].c3 || x[1].nome.localeCompare(y[1].nome, "pt-BR")).map(([id, y]) => [y.nome, y.c3, y.c3 * 3, y.c2, y.c2 * 2, y.c1, f1(y.c3 / jogosEq(id))]);
+    const top = (k, rot) => [...comC].filter(a => a[k]).sort((x, y) => y[k] - x[k] || x.nome.localeCompare(y.nome, "pt-BR")).slice(0, 10)
+      .map((a, i) => ({ nome: a.nome, sub: a.enome, v: a[k], fmt: a[k], extra: rot(a), hi: i === 0 }));
+    const t3 = top("c3", a => (a.c3 * 3) + " pts de 3 · " + a.p + " pts no total"), t2 = top("c2", a => (a.c2 * 2) + " pts de 2"), t1 = top("c1", a => a.c1 + " pts de lance livre");
+    w.append(h("div", { class: "card" }, h("h3", { text: "Cestas de 3, de 2 e lances livres" }), h("p", { class: "cap", text: "Por equipe, no filtro escolhido · lances livres = convertidos" }),
+      h("div", { class: "tablebox" }, h("table", { class: "t-tab" }, h("thead", null, h("tr", null, cab.map((c, i) => h("th", { class: i ? null : "l", text: c })))),
+        h("tbody", null, linhas.map(l => h("tr", null, l.map((v, i) => h("td", { class: i ? null : "l", text: v })))))))));
+    rel.blocos.push({ t: "tabela", titulo: "Cestas de 3, de 2 e lances livres por equipe", cab, linhas });
+    [["Mais cestas de 3", t3], ["Mais cestas de 2", t2], ["Mais lances livres convertidos", t1]].forEach(([tit, it]) => {
+      w.append(h("div", { class: "card" }, h("h3", { text: tit }), h("p", { class: "cap", text: "10 primeiros do filtro escolhido" }), barrasH(it, "Sem dados ainda.", false, false)));
+      relBar(tit, "10 primeiros do filtro escolhido", it);
+    });
+  }
   // basquete: faltas, lances livres, tempos, exclusões e desqualificações (vem da mesa de cada jogo)
   function statsMesa(w, rel, js, todosAtl, relBar) {
     const rs = js.map(j => [j, BQ.resumo(j)]).filter(x => x[1]);
