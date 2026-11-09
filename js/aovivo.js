@@ -100,6 +100,9 @@ export function simNoTempo(esporte, E, agora) {
   return sim;
 }
 
+// placar para o histórico: sets (ou pontos) e, se o jogo não terminou, o set em andamento
+const txtPlacar = p => !p ? null : p.grande.join(" x ") + (!p.fim && p.rotGrande === "Sets" && (p.atual[0] || p.atual[1]) ? " (" + p.atual.join("-") + " no " + p.rotAtual + ")" : "");
+
 export function montarAoVivo(ctx) {
   const h = ctx.h || hLocal, MANUAL = !!ctx.placarManual;
   const { db, toast, esporte, col } = ctx, { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } = ctx.fs;
@@ -142,22 +145,30 @@ export function montarAoVivo(ctx) {
     if (E.videoId) return "https://www.youtube.com/embed/" + E.videoId + "?enablejsapi=1&playsinline=1&autoplay=1&mute=1";
     return canalId() ? "https://www.youtube.com/embed/live_stream?channel=" + canalId() + "&enablejsapi=1&playsinline=1&autoplay=1&mute=1" : "";
   }
+  // a chave inclui o início da transmissão: começar uma nova transmissão sempre recarrega o player
+  const chavePlayer = src => src ? src + "|" + ((E && E.aoVivo && E.inicio) || "") + "|" + recarregas : "";
+  let recarregas = 0, tentativa = null;
+  function recarregarPlayer() { recarregas++; srcAtual = "-"; atualizarPlayer(); }
   function atualizarPlayer() {
-    const src = srcDesejado();
-    if (src === srcAtual) return;
-    srcAtual = src; ytPlayer = null; boxPlayer.textContent = "";
+    const src = srcDesejado(), k = chavePlayer(src);
+    if (k === srcAtual) return;
+    srcAtual = k; ytPlayer = null; boxPlayer.textContent = ""; clearTimeout(tentativa);
     boxPlayer.hidden = !src;
     if (!src) return;
     const fr = h("iframe", { src, title: "Transmissão no YouTube", allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: true, referrerpolicy: "strict-origin-when-cross-origin" });
     boxPlayer.append(fr);
-    if (podeEditar() && E && E.aoVivo && !E.videoId) capturarVideo(fr);
+    if (E && E.aoVivo && !E.videoId) vigiarLive(fr, k);
   }
-  // editor: quando a live do canal abre no player, guarda o código do vídeo (vai para o histórico)
-  function capturarVideo(fr) {
+  // "live atual do canal": o YouTube decide o vídeo quando o player carrega. Se ainda não havia live,
+  // o player fica vazio; então conferimos e recarregamos a cada 20 s até a live aparecer.
+  // O editor também guarda o código do vídeo (vai para o histórico).
+  function vigiarLive(fr, k) {
     const usar = () => { try {
       ytPlayer = new window.YT.Player(fr, { events: { onReady: ev => { let n = 0; const t = setInterval(() => {
         n++; let vid = ""; try { vid = (ev.target.getVideoData() || {}).video_id || ""; } catch (e) {}
-        if (vid || n > 20) { clearInterval(t); if (vid && E && E.aoVivo && !E.videoId && podeEditar()) updateDoc(refEstado, { videoIdAuto: vid }).catch(() => {}); }
+        if (srcAtual !== k) { clearInterval(t); return; }
+        if (vid) { clearInterval(t); if (E && E.aoVivo && !E.videoId && !E.videoIdAuto && podeEditar()) updateDoc(refEstado, { videoIdAuto: vid }).catch(() => {}); return; }
+        if (n >= 4) { clearInterval(t); tentativa = setTimeout(() => { if (srcAtual === k && sec.isConnected && E && E.aoVivo && !E.videoId) recarregarPlayer(); }, 20000); }
       }, 1500); } } });
     } catch (e) {} };
     if (window.YT && window.YT.Player) return usar();
@@ -195,6 +206,7 @@ export function montarAoVivo(ctx) {
       h("div", { class: "t-linha" },
         linkCanal() && h("a", { class: "av-btn ghost", href: vivo ? linkLive() : linkCanal(), target: "_blank", rel: "noopener" }, vivo ? "Abrir no YouTube" : "Canal no YouTube"),
         !vivo && canalId() && h("button", { type: "button", class: "ghost", onclick: () => { verCanal = !verCanal; atualizar(); } }, verCanal ? "Fechar player" : "Ver se o canal está ao vivo"),
+        vivo && srcAtual && h("button", { type: "button", class: "ghost", onclick: () => { recarregarPlayer(); toast("Recarregando o vídeo…"); } }, "↻ Recarregar vídeo"),
         !vivo && igUser() && h("a", { class: "av-btn ghost", href: "https://www.instagram.com/" + igUser() + "/", target: "_blank", rel: "noopener" }, "Instagram @" + igUser())));
   }
 
@@ -323,7 +335,7 @@ export function montarAoVivo(ctx) {
     if (!E) return;
     const p = placarVivo(esporte, MANUAL && E.manual ? jogoManual(E.manual) : jogo);
     const item = { titulo: E.titulo || "Transmissão", videoId: E.videoId || E.videoIdAuto || null, inicio: E.inicio || Date.now(), fim: Date.now(),
-      rotulo: E.rotulo || null, nomeA: E.nomeA || null, nomeB: E.nomeB || null, placar: p ? p.grande.join(" x ") : null, torneioNome: E.torneioNome || null, canalId: canalId() || null };
+      rotulo: E.rotulo || null, nomeA: E.nomeA || null, nomeB: E.nomeB || null, placar: txtPlacar(p), torneioNome: E.torneioNome || null, canalId: canalId() || null };
     try {
       await setDoc(doc(db, "ao_vivo", APP, "historico", "v" + item.inicio), item);
       await updateDoc(refEstado, { aoVivo: false, videoId: null, videoIdAuto: null, igAtivo: false, fim: Date.now() });
@@ -383,8 +395,14 @@ export function montarAoVivo(ctx) {
         h("button", { type: "button", class: "ghost", onclick: desfazerSim }, "Desfazer"),
         h("button", { type: "button", class: "ghost", onclick: () => salvarSim(novaSim()) }, "Recomeçar"),
         h("button", { type: "button", class: "danger", onclick: async () => {
-          try { await setDoc(refEstado, { aoVivo: false, sim: null, simAuto: null, fim: Date.now() }, { merge: true }); rasc = null; painelSujo = true; toast("Simulação encerrada."); }
-          catch (e) { console.error(e); toast("Não deu para encerrar."); }
+          const p = placarVivo(esporte, simAtual());
+          const item = { titulo: E.titulo || "Teste de transmissão", videoId: E.videoId || E.videoIdAuto || null, inicio: E.inicio || Date.now(), fim: Date.now(), simulacao: true,
+            rotulo: "Simulação", nomeA: E.nomeA || "Equipe Azul", nomeB: E.nomeB || "Equipe Vermelha", placar: txtPlacar(p), torneioNome: null, canalId: canalId() || null };
+          try {
+            await setDoc(doc(db, "ao_vivo", APP, "historico", "v" + item.inicio), item);
+            await setDoc(refEstado, { aoVivo: false, sim: null, simAuto: null, videoId: null, videoIdAuto: null, fim: Date.now() }, { merge: true });
+            rasc = null; painelSujo = true; toast("Simulação encerrada e guardada nas transmissões passadas.");
+          } catch (e) { console.error(e); toast("Não deu para encerrar."); }
         } }, "Encerrar simulação")),
       h("label", { class: "t-lbl" }, "Link da live no YouTube (opcional, para testar com live não listada)",
         h("div", { class: "t-linha av-linkrow" },
