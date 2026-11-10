@@ -59,6 +59,72 @@ function hLocal(tag, props, ...kids) {
 const Q4 = () => ["1Q", "2Q", "3Q", "4Q"].map(n => ({ n, a: 0, b: 0 }));
 export function jogoManual(m) { return m ? { id: "manual", a: "A", b: "B", sets: (m.sets || []).map(x => ({ a: x.a || 0, b: x.b || 0 })), periodos: m.periodos || Q4(), qAtual: m.q || null, mrel: m.rel || null, status: m.fim ? "encerrado" : "andamento" } : null; }
 
+/* ---------- simulação do BASQUETE: jogo completo pelo relógio (app e placar.html calculam igual) ----------
+   E.simBq = { inicio, seed, parado (segundos reais já jogados, quando pausado) }.
+   Relógio acelerado: 1 s real = 10 s de jogo (quarto de 10 min ≈ 1 min real; intervalo de 5 s).
+   Cestas de 2 e de 3, faltas (com penalidade e lances livres), ofensivas, técnicas, substituições (5 faltas = sai),
+   tempos e posse alternada — tudo na mesa (j.mesa), então quadra, faltas de equipe, BÔNUS e tempos aparecem na live. */
+const BQ_LAR = [[4, "Thiago"], [5, "Bruno"], [7, "Caio"], [8, "Diego"], [9, "Enzo"], [10, "Fábio"], [11, "Gabriel"], [12, "Heitor"], [13, "Igor"], [14, "João"]];
+const BQ_AZU = [[4, "Lucas"], [6, "Mateus"], [7, "Nicolas"], [8, "Otávio"], [9, "Paulo"], [10, "Rafael"], [11, "Samuel"], [12, "Túlio"], [13, "Vitor"], [15, "William"]];
+const SEG_Q = 600, VEL = 10, PAUSA = 5; // segundos de jogo por quarto, velocidade, intervalo real entre quartos
+const rngDe = seed => { let x = (seed >>> 0) || 7; return () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; };
+const cacheBq = {};
+function linhaDoTempoBq(seed) {
+  if (cacheBq[seed]) return cacheBq[seed];
+  const rnd = rngDe(seed), pick = a => a[Math.floor(rnd() * a.length)];
+  const ids = { a: BQ_LAR.map(x => "sbq-a" + x[0]), b: BQ_AZU.map(x => "sbq-b" + x[0]) }, quadra = { a: ids.a.slice(0, 5), b: ids.b.slice(0, 5) };
+  const ini = { a: [...quadra.a], b: [...quadra.b] }, salto = rnd() < 0.5 ? "a" : "b", fal = {}, ev = [], pts = { a: 0, b: 0 };
+  const out = []; // { t (s reais), q, dt (s de jogo no quarto), e: evento da mesa | {pts:[aid, v, l]} }
+  let seta = salto === "a" ? "b" : "a", q = 0, quartos = ["1Q", "2Q", "3Q", "4Q"], tempos = { a: [], b: [] };
+  const push = (qi, g, e) => out.push({ t: qi * (SEG_Q / VEL + PAUSA) + g / VEL, q: quartos[qi], g, e });
+  for (q = 0; q < quartos.length; q++) {
+    const Q = quartos[q], dur = /^P/.test(Q) ? 300 : SEG_Q, base = q;
+    if (q > 0) { push(base, 0, { t: "pos", l: seta, q: Q }); seta = seta === "a" ? "b" : "a"; }
+    const feQ = { a: 0, b: 0 }; if (/^P/.test(Q) || Q === "4Q") ["a", "b"].forEach(l => feQ[l] = ev.filter(e => e.t === "f" && e.l === l && (e.q === "4Q" || /^P/.test(e.q)) && e.quem !== "tec").length);
+    let g = 3, ataque = rnd() < 0.5 ? "a" : "b";
+    while (true) {
+      g += 9 + Math.floor(rnd() * 16); if (g >= dur - 2) break;
+      const l = ataque, d = l === "a" ? "b" : "a", x = rnd(), at = pick(quadra[l]), df = pick(quadra[d]);
+      const cesta = (aid, lado, v) => { pts[lado] += v; push(base, g, { pts: [aid, v, lado] }); };
+      const falta = (quem, ld, tipo, extra) => { const fx = fal[quem] || (fal[quem] = 0); fal[quem] = fx + 1; feQ[ld]++; const e = { t: "f", l: ld, quem, tipo, arr: 0, conv: false, q: Q, ...extra }; ev.push(e); push(base, g, e);
+        if (fal[quem] >= 5) { const banco = ids[ld].filter(i => !quadra[ld].includes(i) && (fal[i] || 0) < 5); if (banco.length) { const entra = pick(banco), s = { t: "s", l: ld, sai: quem, entra, q: Q }; quadra[ld][quadra[ld].indexOf(quem)] = entra; ev.push(s); push(base, g + 1, s); } } };
+      const lances = (lado, aid, n) => { for (let i = 0; i < n; i++) { const ok = rnd() < 0.74, e = { t: "ll", l: lado, aid, ok, q: Q }; ev.push(e); push(base, g + 1 + i, e); if (ok) cesta(aid, lado, 1); } };
+      if (x < 0.40) cesta(at, l, 2);
+      else if (x < 0.55) cesta(at, l, 3);
+      else if (x < 0.66) { /* erro / rebote do adversário */ }
+      else if (x < 0.86) { // falta da defesa
+        const arr = rnd() < 0.35 ? (rnd() < 0.2 ? 3 : 2) : 0, pen = feQ[d] >= 4, n = arr || (pen ? 2 : 0);
+        falta(df, d, "P", { arr, ll: n, sofreu: n ? at : null }); if (n) lances(l, at, n);
+      }
+      else if (x < 0.90) falta(at, l, "O", {});
+      else if (x < 0.95) { const banco = ids[l].filter(i => !quadra[l].includes(i) && (fal[i] || 0) < 5); if (banco.length) { const k = Math.floor(rnd() * 5), sai = quadra[l][k], entra = pick(banco), s = { t: "s", l, sai, entra, q: Q }; quadra[l][k] = entra; ev.push(s); push(base, g, s); } }
+      else if (x < 0.975) { const met = q < 2 ? "1" : q < 4 ? "2" : Q, lim = q < 2 ? 2 : q < 4 ? 3 : 1; if (tempos[d].filter(t => t === met).length < lim) { tempos[d].push(met); const e = { t: "to", l: d, q: Q, u2: false }; ev.push(e); push(base, g, e); } }
+      else if (x < 0.985) { falta(df, d, "T", { ll: 1, sofreu: at }); lances(l, at, 1); }
+      ataque = d; // posse troca
+    }
+    if (q === quartos.length - 1 && pts.a === pts.b && quartos.length < 7) quartos.push("P" + (quartos.length - 3)); // empate: prorrogação
+  }
+  const fimT = (quartos.length) * (SEG_Q / VEL + PAUSA);
+  return (cacheBq[seed] = { out, ini, salto, quartos, fimT, ids });
+}
+export const simBqSegundos = (E, agora) => !E || !E.simBq ? 0 : E.simBq.parado != null ? E.simBq.parado : Math.max(0, (agora - E.simBq.inicio) / 1000);
+export function simBqNoTempo(E, agora) {
+  if (!E || !E.simBq) return null;
+  const L = linhaDoTempoBq(E.simBq.seed), t = simBqSegundos(E, agora);
+  const atl = {}; BQ_LAR.forEach(([n, nome], i) => atl["sbq-a" + n] = { nome, num: n, cap: i === 0 }); BQ_AZU.forEach(([n, nome], i) => atl["sbq-b" + n] = { nome, num: n, cap: i === 0 });
+  const periodos = L.quartos.map(n => ({ n, a: 0, b: 0 })), stats = {}, ev = [];
+  const qi = Math.min(L.quartos.length - 1, Math.floor(t / (SEG_Q / VEL + PAUSA))), dentro = t - qi * (SEG_Q / VEL + PAUSA);
+  let ultimo = 0;
+  L.out.forEach(o => { if (o.t > t) return; ultimo = Math.max(ultimo, o.t);
+    if (o.e.pts) { const [aid, v, l] = o.e.pts, p = periodos.find(x => x.n === o.q); p[l] += v; const st = stats[aid] || (stats[aid] = { p: 0, b: 0, as: 0 }); st.p += v; st["c" + v] = (st["c" + v] || 0) + 1; }
+    else ev.push(o.e); });
+  const fim = t >= L.fimT - PAUSA, dur = /^P/.test(L.quartos[qi]) ? 300 : SEG_Q;
+  const rest = fim ? 0 : Math.max(0, Math.round(dur - dentro * VEL)), p24 = Math.max(0, 24 - Math.round((t - ultimo) * VEL) % 25);
+  const pausa = E.simBq.parado != null;
+  return { id: "simbq", a: "A", b: "B", status: fim ? "encerrado" : "andamento", periodos, stats, simAtl: atl, capitaes: { a: "sbq-a4", b: "sbq-b4" },
+    mesa: { q: L.quartos[qi], ini: L.ini, salto: L.salto, ev, pend: null, rel: { rest, rod: false, p: p24, em: agora } }, simPausado: pausa, simFim: fim };
+}
+
 /* ---------- simulação: funções puras (usadas pelo app e pelo placar.html) ---------- */
 const SIM_AZUL = [["4", "Marcos"], ["3", "Paulo"], ["1", "Diego"], ["2", "Rafael"], ["5", "Lucas"], ["6", "Bruno"], ["7", "Caio"], ["8", "Tiago"]];
 const SIM_VERM = [["3", "André"], ["4", "Felipe"], ["2", "Gustavo"], ["1", "Renato"], ["5", "Vitor"], ["6", "Igor"], ["7", "Murilo"], ["8", "Otávio"]];
@@ -189,14 +255,15 @@ export function montarAoVivo(ctx) {
     boxTopo.append(cabecalho());
     atualizarPlayer();
     if (E && E.aoVivo && !srcAtual) boxDin.append(h("div", { class: "t-card" }, h("p", { class: "cap", text: "O canal do YouTube ainda não foi cadastrado no app." }), linkLive() && h("a", { class: "av-btn", href: linkLive(), target: "_blank", rel: "noopener" }, "Assistir no YouTube")));
-    if (!MANUAL && E && E.aoVivo && E.sim) { jogo = simAtual(); boxDin.append(cartaoPlacar()); if (podeEditar()) boxDin.append(controlesSim()); }
+    if (E && E.aoVivo && E.simBq) { jogo = simBqNoTempo(E, Date.now()); boxDin.append(cartaoPlacar()); if (podeEditar()) boxDin.append(controlesSimBq()); }
+    else if (!MANUAL && E && E.aoVivo && E.sim) { jogo = simAtual(); boxDin.append(cartaoPlacar()); if (podeEditar()) boxDin.append(controlesSim()); }
     else if (MANUAL && E && E.aoVivo && E.manual) { jogo = jogoManual(E.manual); boxDin.append(cartaoPlacar()); if (podeEditar()) boxDin.append(controlesPlacar()); }
     else if (E && E.jogoId) boxDin.append(cartaoPlacar());
     if (E && E.aoVivo && E.igAtivo && igUser()) boxDin.append(h("a", { class: "av-btn av-ig", href: "https://www.instagram.com/" + igUser() + "/live/", target: "_blank", rel: "noopener" }, "● Ao vivo também no Instagram @" + igUser()));
     boxDin.append(cartaoHistorico());
     const { T: tA, js: jA } = jogosDisponiveis(), chave = podeEditar() + "|" + (tA ? tA.id : "") + "|" + jA.map(j => j.id).join(",");
     if (chave !== chaveEditor) { chaveEditor = chave; painelSujo = true; }
-    if (painelSujo) { painelSujo = false; boxEditor.textContent = ""; if (podeEditar()) boxEditor.append(E && E.aoVivo && E.sim ? null : painelEditor(), !MANUAL && esporte === "biribol" && !(E && E.aoVivo && E.sim) ? cartaoSim() : null, cartaoCanal(), cartaoOverlay()); }
+    if (painelSujo) { painelSujo = false; boxEditor.textContent = ""; if (podeEditar()) boxEditor.append(E && E.aoVivo && (E.sim || E.simBq) ? null : painelEditor(), !MANUAL && esporte === "biribol" && !(E && E.aoVivo && E.sim) ? cartaoSim() : null, esporte !== "biribol" && !(E && E.aoVivo && E.simBq) ? cartaoSimBq() : null, cartaoCanal(), cartaoOverlay()); }
   }
 
   function cabecalho() {
@@ -238,7 +305,7 @@ export function montarAoVivo(ctx) {
     if (esporte === "biribol" || !jogo || !jogo.mesa) return null;
     const est = BQ.estado(jogo); if (!est) return null;
     const T = ctx.torneio ? ctx.torneio() : null, eqs = (T && T.equipes) || [], eq = id => eqs.find(e => e.id === id) || {};
-    const num = id => { for (const e of eqs) { const a = (e.atletas || []).find(x => x.id === id); if (a) return a.num; } return null; };
+    const num = id => { if (jogo.simAtl && jogo.simAtl[id]) return jogo.simAtl[id].num; for (const e of eqs) { const a = (e.atletas || []).find(x => x.id === id); if (a) return a.num; } return null; };
     const ra = BQ.relogioAgora(jogo.mesa), nomes = { a: nA, b: nB };
     const linha = l => { const fe = BQ.faltasEquipe(est, l), td = BQ.temposDisponiveis(est, l, est.q, ra ? ra.rest : null);
       return h("div", { class: "bq-lin", style: "--c:" + BQ.CORES[l].c }, h("span", { text: nomes[l] }), h("span", { class: "bq-dots" }, [0, 1, 2, 3, 4].map(i => h("i", { class: i < fe ? (i >= 4 ? "on pen" : "on") : "" }))),
@@ -246,7 +313,7 @@ export function montarAoVivo(ctx) {
     return h("div", { class: "rz bq rz-vivo" },
       h("div", { class: "bq-rel" }, h("div", { class: "bq-relj" }, h("small", { text: BQ.nomeQ(est.q) }), h("b", { class: "av-rel", "data-r": "j", text: ra ? BQ.fmtRel(ra.rest) : "–" })),
         h("div", { class: "bq-rel24" }, h("small", { text: "Posse" }), h("b", { class: "av-rel", "data-r": "p", text: ra ? ra.p : "–" }))),
-      h("div", { class: "rz-box bq-box" }, BQ.quadra({ est, num, nomes, capitaes: { a: eq(jogo.a).capitao, b: eq(jogo.b).capitao } })),
+      h("div", { class: "rz-box bq-box" }, BQ.quadra({ est, num, nomes, capitaes: jogo.capitaes || { a: eq(jogo.a).capitao, b: eq(jogo.b).capitao } })),
       h("div", { class: "bq-eq" }, linha("a"), linha("b"), est.seta && h("p", { class: "cap", text: "Posse alternada: " + nomes[est.seta] })));
   }
   // relógios da mesa andando na tela de quem assiste
@@ -349,7 +416,7 @@ export function montarAoVivo(ctx) {
       marca: ctx.marca || null, autor: ctx.autor ? ctx.autor() || null : null, atualizado: Date.now()
     };
     if (!vivoAntes) d.videoIdAuto = null;
-    d.sim = null;
+    d.sim = null; d.simBq = null;
     if (MANUAL) {
       const nA = (rasc.nomeA || "").trim() || "Time A", nB = (rasc.nomeB || "").trim() || "Time B", rot = rasc.rotulo || ctx.rotuloManual || "Rachão";
       const ant = vivoAntes && E.manual ? E.manual : null;
@@ -390,6 +457,46 @@ export function montarAoVivo(ctx) {
           rasc = null; painelSujo = true; toast("Simulação no ar. Marque pontos ou ligue o automático."); }
         catch (e) { console.error(e); toast("Não deu para começar. Verifique se você está logado como editor."); }
       } }, "Simular partida"));
+  }
+  // ----- simulação do basquete -----
+  setInterval(() => { if (!E || !E.aoVivo || !E.simBq || E.simBq.parado != null || !sec.isConnected) return; atualizar(); }, 1000);
+  function cartaoSimBq() {
+    return h("div", { class: "t-card t-form" },
+      h("h3", { text: "Testar sem jogo real" }),
+      E && E.aoVivo && h("p", { class: "cap", text: "Há uma transmissão marcada como no ar: a simulação toma o lugar dela até você começar outra." }),
+      h("p", { class: "cap", text: "Simula um jogo completo (Equipe Laranja x Equipe Azul) em tempo acelerado: cada quarto dura cerca de 1 minuto, com cestas de 2 e de 3, faltas, lances livres, BÔNUS, tempos, substituições e posse alternada. Aparece aqui e no placar da live (Prism/Streamlabs/OBS). Nada entra no torneio." }),
+      h("button", { type: "button", onclick: async () => {
+        try { await setDoc(refEstado, { aoVivo: true, titulo: "Teste de transmissão", inicio: Date.now(), videoId: null, videoIdAuto: null, igAtivo: false, col, torneioId: null, jogoId: null, torneioNome: null,
+          nomeA: "Equipe Laranja", nomeB: "Equipe Azul", rotulo: "Simulação", esporte, marca: ctx.marca || null, manual: null, sim: null, simAuto: null,
+          simBq: { inicio: Date.now(), seed: Math.floor(Math.random() * 1e9), parado: null }, atualizado: Date.now() }, { merge: true });
+          rasc = null; painelSujo = true; toast("Simulação no ar: o jogo anda sozinho (1 quarto ≈ 1 minuto)."); }
+        catch (e) { console.error(e); toast("Não deu para começar. Verifique se você está logado como editor."); }
+      } }, "Simular partida"));
+  }
+  async function salvarSimBq(simBq) { E.simBq = simBq; atualizar(); try { await setDoc(refEstado, { simBq, atualizado: Date.now() }, { merge: true }); } catch (e) { console.error(e); toast("Não deu para salvar a simulação."); } }
+  function controlesSimBq() {
+    const sb = E.simBq, parado = sb.parado != null, j = jogo, fim = j && j.simFim;
+    return h("div", { class: "t-card av-ctl" },
+      h("span", { class: "t-sub", text: "Simulação · " + (fim ? "fim de jogo" : parado ? "pausada" : "rodando (1 s = 10 s de jogo)") }),
+      h("div", { class: "t-linha" },
+        !fim && h("button", { type: "button", class: parado ? "" : "ghost", onclick: () => salvarSimBq(parado ? { ...sb, inicio: Date.now() - sb.parado * 1000, parado: null } : { ...sb, parado: simBqSegundos(E, Date.now()) }) }, parado ? "▶ Continuar" : "⏸ Pausar"),
+        h("button", { type: "button", class: "ghost", onclick: () => salvarSimBq({ ...sb, parado: null, inicio: Date.now() - Math.min(simBqSegundos(E, Date.now()) + 65, 9999) * 1000 }) }, "Pular quarto ⏭"),
+        h("button", { type: "button", class: "ghost", onclick: () => salvarSimBq({ inicio: Date.now(), seed: Math.floor(Math.random() * 1e9), parado: null }) }, "Recomeçar"),
+        h("button", { type: "button", class: "danger", onclick: async () => {
+          const p = placarVivo(esporte, jogo);
+          const item = { titulo: E.titulo || "Teste de transmissão", videoId: E.videoId || E.videoIdAuto || null, inicio: E.inicio || Date.now(), fim: Date.now(), simulacao: true,
+            rotulo: "Simulação", nomeA: E.nomeA || "Equipe Laranja", nomeB: E.nomeB || "Equipe Azul", placar: txtPlacar(p), torneioNome: null, canalId: canalId() || null };
+          try {
+            await setDoc(doc(db, "ao_vivo", APP, "historico", "v" + item.inicio), item);
+            await setDoc(refEstado, { aoVivo: false, simBq: null, videoId: null, videoIdAuto: null, fim: Date.now() }, { merge: true });
+            rasc = null; painelSujo = true; toast("Simulação encerrada e guardada nas transmissões passadas.");
+          } catch (e) { console.error(e); toast("Não deu para encerrar."); }
+        } }, "Encerrar simulação")),
+      h("label", { class: "t-lbl" }, "Link da live no YouTube (opcional, para testar com live não listada)",
+        h("div", { class: "t-linha av-linkrow" },
+          h("input", { id: "av-simlinkbq", value: E.videoId ? "https://youtu.be/" + E.videoId : "", placeholder: "Vazio = live pública atual do canal" }),
+          h("button", { type: "button", class: "ghost", onclick: async () => { const v = document.getElementById("av-simlinkbq").value.trim(), vid = lerVideo(v); if (v && !vid) { toast("Não reconheci esse link do YouTube."); return; }
+            try { await setDoc(refEstado, { videoId: vid || null }, { merge: true }); srcAtual = "-"; toast(vid ? "Link da live salvo." : "Voltou para a live atual do canal."); } catch (e) { toast("Não deu para salvar."); } } }, "Usar link"))));
   }
   async function salvarSim(sim, extra) {
     E.sim = sim; E.simAuto = extra && "simAuto" in extra ? extra.simAuto : null; atualizar();
