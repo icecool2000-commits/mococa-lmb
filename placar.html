@@ -85,7 +85,8 @@ const MARCA = {
   mococa: { titulo: "Biribol Mococa na Liga", logo: "img/logo.jpg", escura: "#061535", cor: "#1a679f", destaque: "#e3b90f" },
   biribol: { titulo: "Biribol Oficial Mococa", logo: "logo.jpg", escura: "#1f1f23", cor: "#d81f2a", destaque: "#e2626b" },
   "biribol-treino": { titulo: "Biribol Oficial Mococa", logo: "logo.jpg", escura: "#1f1f23", cor: "#d81f2a", destaque: "#e2626b" },
-  basquete: { titulo: "Família Basquete Mococa", logo: "logo.jpg", escura: "#0c0c0d", cor: "#3f9a3c", destaque: "#ec6a2c" }
+  basquete: { titulo: "Família Basquete Mococa", logo: "logo.jpg", escura: "#0c0c0d", cor: "#3f9a3c", destaque: "#ec6a2c" },
+  "basquete-treino": { titulo: "Família Basquete Mococa", logo: "logo.jpg", escura: "#0c0c0d", cor: "#3f9a3c", destaque: "#ec6a2c" }
 };
 function pintarRodizio() {
   const box = $("rz");
@@ -135,11 +136,13 @@ function pintar() {
     x.append(pos, f, to);
   });
   tag.append([p.fim ? "Final do jogo" : esp === "biribol" ? p.rotAtual : est ? BQ.nomeQ(est.q) : p.rotAtual + " · " + (p.atual[0]) + "-" + (p.atual[1]), E.rotulo].filter(Boolean).join(" · "));
+  const rm = !ra && esp !== "biribol" && J && J.mrel && !p.fim ? BQ.relogioAgora({ rel: J.mrel }) : null; // rachão/amistoso marcado à mão
+  if (rm) { const c = document.createElement("span"); c.className = "rel"; c.id = "relj"; c.textContent = BQ.fmtRel(rm.rest); tag.append(c); }
   if (ra) { const c = document.createElement("span"); c.className = "rel"; c.id = "relj"; c.textContent = BQ.fmtRel(ra.rest); const c2 = document.createElement("span"); c2.className = "rel24"; c2.id = "rel24"; c2.textContent = ra.p; tag.append(c, c2); }
   bug.classList.add("on");
 }
 // relógios da mesa do basquete andando sozinhos (o app só grava ao iniciar/parar)
-setInterval(() => { if (!J || !J.mesa || !$("relj")) return; const ra = BQ.relogioAgora(J.mesa); if (!ra) return; $("relj").textContent = BQ.fmtRel(ra.rest); $("rel24").textContent = ra.p; }, 1000);
+setInterval(() => { if (!J || !(J.mesa || J.mrel) || !$("relj")) return; const ra = BQ.relogioAgora(J.mesa && J.mesa.rel ? J.mesa : { rel: J.mrel }); if (!ra) return; $("relj").textContent = BQ.fmtRel(ra.rest); if ($("rel24")) $("rel24").textContent = ra.p; }, 1000);
 // simulação automática: os pontos saem pelo relógio, sem depender do app estar aberto
 let passos = -1;
 setInterval(() => { if (!E || !E.aoVivo || !E.simAuto) return; const n = av.simPassos(E, Date.now()); if (n !== passos) { passos = n; pintar(); } }, 1000);

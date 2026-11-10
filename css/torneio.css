@@ -408,3 +408,10 @@ td.t-am{color:#b38900;font-weight:700}td.t-vm{color:#e0282e;font-weight:700}
 .t-cestas{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--muted);grid-column:1/-1}
 .t-cestas b{color:var(--fg);font-size:14px}
 .t-cestas .c3 b{color:#ec6a2c}
+/* placar à mão do basquete (Ao vivo do treino/rachão/amistoso) */
+.avb{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:10px}
+.avb-lado{display:flex;flex-direction:column;gap:6px;min-width:0}
+.avb-bts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.avb-bts button{font-size:20px;font-weight:800;padding:14px 0}
+.av-relm{font-size:18px;margin:4px 0}
+.av-relm b{font-variant-numeric:tabular-nums}
