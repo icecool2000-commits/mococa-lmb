@@ -109,14 +109,43 @@ service cloud.firestore {
     }
 
     // ===== BASQUETE AEM (mesmas regras do Basquete, coleções aem_*) =====
+    // Dias e horários dos treinos ficam em aem_config/agenda (organizador e editores mudam pelo app):
+    // mins = {"0": 600} minutos do dia em Brasília por dia da semana (0 = domingo); abre = minutos que a lista fica aberta antes do treino.
+    // Sem agenda cadastrada vale o horário antigo (domingo 10:00).
+    function aemAgendaExiste() {
+      return exists(/databases/$(database)/documents/aem_config/agenda);
+    }
+    function aemAberto(dia) {
+      let ag = get(/databases/$(database)/documents/aem_config/agenda).data;
+      let d = dataDo(dia);
+      let k = string(d.dayOfWeek() % 7);
+      let m = ag.mins.get(k, -1);
+      let ini = d + duration.value(m + 180, 'm');
+      return m >= 0
+        && request.time < ini
+        && request.time >= ini - duration.value(ag.abre.get(k, 10080), 'm');
+    }
+    function aemTreinoAberto(dia) {
+      return (aemAgendaExiste() && aemAberto(dia)) || (!aemAgendaExiste() && basqueteAberto(dia));
+    }
+    match /aem_config/agenda {
+      allow read: if true;
+      allow write: if podeTorneio()
+        && request.resource.data.keys().hasOnly(['mins', 'abre', 'locais', 'atualizado', 'por'])
+        && request.resource.data.mins is map
+        && request.resource.data.mins.size() >= 1
+        && request.resource.data.mins.size() <= 7
+        && request.resource.data.abre is map
+        && request.resource.data.locais is map;
+    }
     match /{path=**}/aem_presencas/{p} { allow read: if true; }
     match /aem_treinos/{dia} {
       allow read: if true;
       allow write: if isAdmin();
       match /aem_presencas/{p} {
-        allow create: if isAdmin() || (presencaValida(dia) && basqueteAberto(dia));
+        allow create: if isAdmin() || (presencaValida(dia) && aemTreinoAberto(dia));
         allow delete: if isAdmin()
-          || (request.auth != null && resource.data.uid == request.auth.uid && basqueteAberto(dia));
+          || (request.auth != null && resource.data.uid == request.auth.uid && aemTreinoAberto(dia));
         allow update: if isAdmin();
       }
     }
