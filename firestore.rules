@@ -108,6 +108,41 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ===== BASQUETE AEM (mesmas regras do Basquete, coleções aem_*) =====
+    match /{path=**}/aem_presencas/{p} { allow read: if true; }
+    match /aem_treinos/{dia} {
+      allow read: if true;
+      allow write: if isAdmin();
+      match /aem_presencas/{p} {
+        allow create: if isAdmin() || (presencaValida(dia) && basqueteAberto(dia));
+        allow delete: if isAdmin()
+          || (request.auth != null && resource.data.uid == request.auth.uid && basqueteAberto(dia));
+        allow update: if isAdmin();
+      }
+    }
+    match /aem_amistosos/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+      match /aem_presencas/{p} {
+        allow create: if isAdmin() || (presencaAmistoso() && request.time < get(/databases/$(database)/documents/aem_amistosos/$(id)).data.inicio);
+        allow delete: if isAdmin()
+          || (request.auth != null && resource.data.uid == request.auth.uid && request.time < get(/databases/$(database)/documents/aem_amistosos/$(id)).data.inicio);
+        allow update: if isAdmin();
+      }
+    }
+    match /aem_config/{d} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /aem_torneios/{t} {
+      allow read: if true;
+      allow write: if podeTorneio();
+      match /jogos/{j} {
+        allow read: if true;
+        allow write: if podeTorneio();
+      }
+    }
+
     // ===== EDITORES =====
     // organizador cria/remove/promove qualquer um; gestor só cria e remove editores/mesários (nunca gestores)
     match /editores/{u} {
