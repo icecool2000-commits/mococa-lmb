@@ -57,7 +57,7 @@ function hLocal(tag, props, ...kids) {
 // placar marcado à mão (modo treino/rachão, sem súmula): vira um "jogo" para as mesmas contas
 // basquete: periodos (quartos), q = quarto atual, rel = relógio {rest, rod, em}, fim = encerrado
 const Q4 = () => ["1Q", "2Q", "3Q", "4Q"].map(n => ({ n, a: 0, b: 0 }));
-export function jogoManual(m) { return m ? { id: "manual", a: "A", b: "B", sets: (m.sets || []).map(x => ({ a: x.a || 0, b: x.b || 0 })), periodos: m.periodos || Q4(), qAtual: m.q || null, mrel: m.rel || null, status: m.fim ? "encerrado" : "andamento" } : null; }
+export function jogoManual(m) { return m ? { id: "manual", a: "A", b: "B", sets: (m.sets || []).map(x => ({ a: x.a || 0, b: x.b || 0 })), periodos: m.periodos || Q4(), qAtual: m.q || null, mrel: m.rel || null, mjog: m.jog ? { jog: m.jog, feq: m.feq || {}, q: m.q } : null, status: m.fim ? "encerrado" : "andamento" } : null; }
 
 /* ---------- simulação do BASQUETE: jogo completo pelo relógio (app e placar.html calculam igual) ----------
    E.simBq = { inicio, seed, parado (segundos reais já jogados, quando pausado) }.
@@ -302,16 +302,17 @@ export function montarAoVivo(ctx) {
 
   // basquete: quadra com quem está em quadra, faltas, posse alternada, relógios e tempos (vem da mesa da súmula)
   function mesaVivo(nA, nB) {
-    if (esporte === "biribol" || !jogo || !jogo.mesa) return null;
-    const est = BQ.estado(jogo); if (!est) return null;
+    if (esporte === "biribol" || !jogo || !(jogo.mesa || jogo.mjog)) return null;
+    if (jogo.mjog && MANUAL && podeEditar()) return null; // o mesário já vê a quadra nos controles
+    const est = jogo.mesa ? BQ.estado(jogo) : BQ.estadoManual(jogo.mjog); if (!est) return null;
     const T = ctx.torneio ? ctx.torneio() : null, eqs = (T && T.equipes) || [], eq = id => eqs.find(e => e.id === id) || {};
-    const num = id => { if (jogo.simAtl && jogo.simAtl[id]) return jogo.simAtl[id].num; for (const e of eqs) { const a = (e.atletas || []).find(x => x.id === id); if (a) return a.num; } return null; };
+    const num = id => { if (jogo.mjog) return BQ.numManual(jogo.mjog, id); if (jogo.simAtl && jogo.simAtl[id]) return jogo.simAtl[id].num; for (const e of eqs) { const a = (e.atletas || []).find(x => x.id === id); if (a) return a.num; } return null; };
     const ra = BQ.relogioAgora(jogo.mesa), nomes = { a: nA, b: nB };
-    const linha = l => { const fe = BQ.faltasEquipe(est, l), td = BQ.temposDisponiveis(est, l, est.q, ra ? ra.rest : null);
+    const linha = l => { const fe = BQ.faltasEquipe(est, l), td = est.manual ? null : BQ.temposDisponiveis(est, l, est.q, ra ? ra.rest : null);
       return h("div", { class: "bq-lin", style: "--c:" + BQ.CORES[l].c }, h("span", { text: nomes[l] }), h("span", { class: "bq-dots" }, [0, 1, 2, 3, 4].map(i => h("i", { class: i < fe ? (i >= 4 ? "on pen" : "on") : "" }))),
-        h("b", { class: fe >= 4 ? "bq-pen" : "", text: fe >= 4 ? "PENALIDADE" : fe + " falta(s)" }), h("small", { text: "· " + td + " tempo(s)" })); };
+        h("b", { class: fe >= 4 ? "bq-pen" : "", text: fe >= 4 ? "PENALIDADE" : fe + " falta(s)" }), td != null && h("small", { text: "· " + td + " tempo(s)" })); };
     return h("div", { class: "rz bq rz-vivo" },
-      h("div", { class: "bq-rel" }, h("div", { class: "bq-relj" }, h("small", { text: BQ.nomeQ(est.q) }), h("b", { class: "av-rel", "data-r": "j", text: ra ? BQ.fmtRel(ra.rest) : "–" })),
+      !est.manual && h("div", { class: "bq-rel" }, h("div", { class: "bq-relj" }, h("small", { text: BQ.nomeQ(est.q) }), h("b", { class: "av-rel", "data-r": "j", text: ra ? BQ.fmtRel(ra.rest) : "–" })),
         h("div", { class: "bq-rel24" }, h("small", { text: "Posse" }), h("b", { class: "av-rel", "data-r": "p", text: ra ? ra.p : "–" }))),
       h("div", { class: "rz-box bq-box" }, BQ.quadra({ est, num, nomes, capitaes: jogo.capitaes || { a: eq(jogo.a).capitao, b: eq(jogo.b).capitao } })),
       h("div", { class: "bq-eq" }, linha("a"), linha("b"), est.seta && h("p", { class: "cap", text: "Posse alternada: " + nomes[est.seta] })));
@@ -601,7 +602,36 @@ export function montarAoVivo(ctx) {
     const lado = (l, nome) => h("div", { class: "avb-lado" }, h("b", { text: nome }),
       h("div", { class: "avb-bts" }, [1, 2, 3].map(n => h("button", { type: "button", class: "av-mais", onclick: () => pts(l, n) }, "+" + n))),
       h("button", { type: "button", class: "ghost t-mini", onclick: () => pts(l, -1) }, "−1 (corrigir)"));
-    return h("div", { class: "t-card av-ctl" },
+    // jogadores (opcional): nome, número, em quadra, faltas — aparece a quadra no app e na live
+    const jog = { a: [...((m.jog && m.jog.a) || [])], b: [...((m.jog && m.jog.b) || [])] }, feq = JSON.parse(JSON.stringify(m.feq || {})), qf = BQ.qFaltas(q);
+    const nomes = { a: nA, b: nB };
+    const falta = (l, id, d) => { const i = jog[l].findIndex(p => p.id === id); if (i < 0) return; const f = Math.max(0, (jog[l][i].f || 0) + d); if (f === (jog[l][i].f || 0)) return;
+      jog[l][i] = { ...jog[l][i], f }; const x = feq[qf] || (feq[qf] = { a: 0, b: 0 }); x[l] = Math.max(0, (x[l] || 0) + d); salvar({ jog, feq });
+      if (d > 0) { const fe = x[l]; toast("Falta de nº " + (jog[l][i].num ?? "–") + " (" + f + "ª)." + (f >= 5 ? " 5 faltas: tem que sair." : "") + (fe >= 5 ? " " + nomes[l] + " na PENALIDADE (" + fe + " faltas no quarto)." : "")); } };
+    const emQuadra = (l, id) => { const i = jog[l].findIndex(p => p.id === id); if (i < 0) return; const on = !jog[l][i].on;
+      if (on && jog[l].filter(p => p.on).length >= 5) { toast("Já há 5 em quadra: tire um antes."); return; } jog[l][i] = { ...jog[l][i], on }; salvar({ jog }); };
+    const novoJog = (l, nome, num) => { nome = (nome || "").trim(); if (!nome) return; const usados = new Set(jog[l].map(p => p.num)); let n = Number(num) || 0; if (!n || usados.has(n)) { n = 4; while (usados.has(n)) n++; }
+      jog[l].push({ id: l + Date.now().toString(36) + Math.floor(Math.random() * 99), nome, num: n, f: 0, on: jog[l].filter(p => p.on).length < 5 }); salvar({ jog }); };
+    const est = BQ.estadoManual({ jog, feq, q });
+    const sugest = (ctx.presentes && ctx.presentes()) || [];
+    const ladoJog = l => h("div", { class: "avj-lado", style: "--c:" + BQ.CORES[l].c },
+      h("b", { text: nomes[l] + " · " + jog[l].filter(p => p.on).length + "/5 em quadra · faltas no quarto: " + ((feq[qf] && feq[qf][l]) || 0) }),
+      ...jog[l].sort((x, y) => (x.num || 0) - (y.num || 0)).map(p => h("div", { class: "avj-linha" + (p.on ? " on" : "") },
+        h("button", { type: "button", class: "avj-num", title: p.on ? "Em quadra (toque para mandar ao banco)" : "No banco (toque para pôr em quadra)", onclick: () => emQuadra(l, p.id) }, String(p.num ?? "–")),
+        h("span", { class: "avj-nome", text: p.nome + (p.on ? "" : " · banco") }),
+        h("span", { class: "bq-dots mini" }, [0, 1, 2, 3, 4].map(i => h("i", { class: i < (p.f || 0) ? ((p.f || 0) >= 4 ? "on pen" : "on") : "" }))),
+        h("button", { type: "button", class: "ghost t-mini", onclick: () => falta(l, p.id, 1) }, "+ falta"),
+        h("button", { type: "button", class: "ghost t-mini", onclick: () => falta(l, p.id, -1), "aria-label": "Tirar falta" }, "−"),
+        h("button", { type: "button", class: "ghost t-mini", "aria-label": "Remover jogador", onclick: () => { jog[l] = jog[l].filter(x => x.id !== p.id); salvar({ jog }); } }, "×"))),
+      h("form", { class: "avj-add", onsubmit: ev => { ev.preventDefault(); const f = ev.currentTarget; novoJog(l, f.nome.value, f.num.value); } },
+        h("input", { name: "num", type: "number", min: 0, max: 99, placeholder: "Nº", "aria-label": "Número" }), h("input", { name: "nome", placeholder: "Nome do jogador", maxlength: 40 }), h("button", { type: "submit", class: "ghost t-mini" }, "+ Jogador")),
+      sugest.length ? h("div", { class: "avj-sug" }, h("small", { text: "Confirmados na lista: " }), ...sugest.filter(n => !jog.a.concat(jog.b).some(p => p.nome === n)).slice(0, 24).map(n => h("button", { type: "button", class: "ghost t-mini", onclick: () => novoJog(l, n) }, "+ " + n))) : null);
+    const blocoJog = h("details", { class: "t-card avj", open: !!(m.jog && (m.jog.a || []).length + (m.jog.b || []).length) },
+      h("summary", { text: "Jogadores e faltas (opcional) — mostra a quadra no app e na live" }),
+      est && h("div", { class: "rz-box bq-box" }, BQ.quadra({ est, num: id => BQ.numManual({ jog }, id), nomes, clicar: (l, id) => falta(l, id, 1) })),
+      est && h("p", { class: "cap", text: "Toque num jogador da quadra para marcar falta. Toque no número para mandar ao banco ou pôr em quadra." }),
+      ladoJog("a"), ladoJog("b"));
+    return h("div", null, h("div", { class: "t-card av-ctl" },
       h("span", { class: "t-sub", text: "Marcar pontos · " + BQ.nomeQ(q) + (m.fim ? " · ENCERRADO" : "") }),
       h("div", { class: "avb" }, lado("a", nA), lado("b", nB)),
       h("div", { class: "bq-rel" }, h("div", { class: "bq-relj" }, h("small", { text: BQ.nomeQ(q) }), h("b", { class: "av-rel", "data-r": "j", text: BQ.fmtRel(ra.rest) })),
@@ -614,7 +644,7 @@ export function montarAoVivo(ctx) {
       h("div", { class: "t-linha" },
         !m.fim && h("button", { type: "button", class: "ghost", onclick: () => salvar({ fim: true, rel: relAgora(false) }) }, "Encerrar jogo"),
         m.fim && h("button", { type: "button", class: "ghost", onclick: () => salvar({ fim: false }) }, "Reabrir jogo"),
-        h("button", { type: "button", class: "ghost", onclick: ev => { const b = ev.currentTarget; if (!b.dataset.armado) { b.dataset.armado = "1"; b.textContent = "Toque de novo para zerar"; setTimeout(() => { delete b.dataset.armado; b.textContent = "Novo jogo (zerar placar)"; }, 4000); return; } salvar({ periodos: Q4(), q: "1Q", rel: relAgora(false, 600), fim: false }); } }, "Novo jogo (zerar placar)")));
+        h("button", { type: "button", class: "ghost", onclick: ev => { const b = ev.currentTarget; if (!b.dataset.armado) { b.dataset.armado = "1"; b.textContent = "Toque de novo para zerar"; setTimeout(() => { delete b.dataset.armado; b.textContent = "Novo jogo (zerar placar)"; }, 4000); return; } salvar({ periodos: Q4(), q: "1Q", rel: relAgora(false, 600), fim: false, feq: {}, jog: { a: jog.a.map(p => ({ ...p, f: 0 })), b: jog.b.map(p => ({ ...p, f: 0 })) } }); } }, "Novo jogo (zerar placar)"))), blocoJog);
   }
 
   function cartaoCanal() {
@@ -649,11 +679,14 @@ export function montarAoVivo(ctx) {
       h("div", { class: "t-linha" },
         h("button", { type: "button", onclick: () => { navigator.clipboard && navigator.clipboard.writeText(url).then(() => toast("Link copiado."), () => { campo.select(); toast("Copie o link selecionado."); }); } }, "Copiar link"),
         h("a", { class: "av-btn ghost", href: url, target: "_blank", rel: "noopener" }, "Abrir o placar"),
+        esporte !== "biribol" && h("button", { type: "button", class: "ghost", onclick: () => { const u = url + "&quadra=1"; navigator.clipboard && navigator.clipboard.writeText(u).then(() => toast("Link do placar + quadra copiado."), () => toast(u)); } }, "Copiar link placar + quadra"),
+        esporte !== "biribol" && h("button", { type: "button", class: "ghost", onclick: () => { const u = url + "&so=quadra"; navigator.clipboard && navigator.clipboard.writeText(u).then(() => toast("Link da quadra copiado."), () => toast(u)); } }, "Copiar link só da quadra"),
         esporte === "biribol" && !MANUAL && h("button", { type: "button", class: "ghost", onclick: () => { const u = url + "&so=rodizio"; navigator.clipboard && navigator.clipboard.writeText(u).then(() => toast("Link do rodízio copiado."), () => toast(u)); } }, "Copiar link do rodízio")),
       h("ul", { class: "cap av-dicas" },
         h("li", { text: "OBS / Streamlabs Desktop: Fontes › + › Navegador (Browser). Cole o link, largura 1280 e altura 200, e posicione no topo do vídeo." }),
         h("li", { text: "Prism Live (celular): Widget › Web (ou Navegador) e cole o link." }),
         h("li", { text: "Para placar embaixo, use o link com &pos=baixo; para só os números, &compacto=1." }),
+        esporte !== "biribol" && h("li", null, "Quadra na live (jogadores em quadra com as faltas, faltas de equipe e posse): placar + quadra juntos com ", h("code", { text: "&quadra=1" }), "; só a quadra, num widget separado, com ", h("code", { text: "&so=quadra" }), " (tamanho com &largura=600). No torneio vem da mesa da súmula; no rachão/amistoso, dos jogadores cadastrados no placar à mão."),
         esporte === "biribol" && h("li", null, "Rodízio na live: placar + piscina juntos com ", h("code", { text: "&rodizio=1" }), "; só a piscina, num widget separado, com ", h("code", { text: "&so=rodizio" }), " (tamanho com &largura=600). Aparece quando o mesário cadastrou a formação na súmula do jogo em destaque."),
         h("li", { text: "O placar mostra o jogo em destaque escolhido em \"Transmissão no ar\". Troque o jogo aqui e ele muda na live." }),
         h("li", { text: "Sem transmissão começada aqui no app, ou sem jogo escolhido, aparece só a faixa com a logo e o título. Os números entram quando você toca em Começar transmissão com um jogo escolhido." })));

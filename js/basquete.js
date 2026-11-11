@@ -107,6 +107,19 @@ export function consequencia(est, f) {
   return ret;
 }
 
+// placar à mão (rachão/amistoso) com jogadores: m.jog = {a:[{id,nome,num,f,on}], b:[...]}, m.feq = {"1Q":{a,b}, ...}
+// devolve um "estado" no mesmo formato de estado(j), para desenhar a quadra e as faltas de equipe
+export function estadoManual(m) {
+  if (!m || !m.jog || !((m.jog.a || []).length || (m.jog.b || []).length)) return null;
+  const quadra = { a: [], b: [] }, faltas = {}, fora = {}, eqQ = { a: {}, b: {} };
+  ["a", "b"].forEach(l => {
+    (m.jog[l] || []).forEach(p => { if (p.on && quadra[l].length < 5) quadra[l].push(p.id); faltas[p.id] = { n: p.f || 0 }; if ((p.f || 0) >= 5) fora[p.id] = "5 faltas"; });
+    Object.entries(m.feq || {}).forEach(([q, v]) => { eqQ[l][q] = (v && v[l]) || 0; });
+  });
+  return { q: m.q || "1Q", quadra, faltas, ll: {}, eqQ, tec: { a: { C: 0, B: 0, D: 0 }, b: { C: 0, B: 0, D: 0 } }, tecFora: { a: false, b: false }, tempos: { a: [], b: [] }, seta: null, fora, pend: null, manual: true };
+}
+export const numManual = (m, id) => { for (const l of ["a", "b"]) { const p = ((m && m.jog && m.jog[l]) || []).find(x => x.id === id); if (p) return p.num; } return null; };
+
 // estatísticas da mesa de um jogo: por atleta e por equipe
 export function resumo(j) {
   const est = estado(j); if (!est) return null;

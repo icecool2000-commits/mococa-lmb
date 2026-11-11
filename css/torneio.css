@@ -415,3 +415,15 @@ td.t-am{color:#b38900;font-weight:700}td.t-vm{color:#e0282e;font-weight:700}
 .avb-bts button{font-size:20px;font-weight:800;padding:14px 0}
 .av-relm{font-size:18px;margin:4px 0}
 .av-relm b{font-variant-numeric:tabular-nums}
+/* jogadores do placar à mão do basquete (rachão/amistoso) */
+.avj summary{cursor:pointer;font-weight:700}
+.avj-lado{display:flex;flex-direction:column;gap:6px;padding:10px;margin-top:8px;border-radius:12px;border:1px solid var(--line);border-left:5px solid var(--c)}
+.avj-linha{display:flex;align-items:center;gap:5px;flex-wrap:nowrap;opacity:.65}
+.avj-linha .t-mini{padding:5px 8px;flex:0 0 auto}
+.avj-linha.on{opacity:1}
+.avj-num{min-width:40px;padding:6px 8px;border-radius:999px;background:var(--c);color:#fff;font-weight:800;border:0}
+.avj-linha:not(.on) .avj-num{background:transparent;color:var(--fg);border:2px dashed var(--c)}
+.avj-nome{flex:1 1 0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.avj-add{display:flex;gap:6px;flex-wrap:wrap}
+.avj-add input[name=num]{width:64px}.avj-add input[name=nome]{flex:1 1 140px;min-width:0}
+.avj-sug{display:flex;gap:4px;flex-wrap:wrap;align-items:center}

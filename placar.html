@@ -73,12 +73,12 @@ const q = new URLSearchParams(location.search), APP = q.get("app") || "biribol";
 if (q.get("pos") === "baixo") document.body.classList.add("baixo");
 if (q.get("compacto") === "1") document.body.classList.add("compacto");
 // rodízio: &rodizio=1 mostra a piscina junto do placar; &so=rodizio mostra só a piscina (para um widget separado)
-const SO_RZ = q.get("so") === "rodizio", COM_RZ = SO_RZ || q.get("rodizio") === "1";
+const SO_RZ = q.get("so") === "rodizio" || q.get("so") === "quadra", COM_RZ = SO_RZ || q.get("rodizio") === "1" || q.get("quadra") === "1";
 if (SO_RZ) document.body.classList.add("so-rz");
 if (q.get("largura")) document.documentElement.style.setProperty("--rzw", parseInt(q.get("largura"), 10) + "px");
 const db = getFirestore(initializeApp(firebaseConfig));
 const $ = id => document.getElementById(id);
-let E = null, J = null, chave = "", unsub = null;
+let E = null, J = null, T = null, chave = "", unsub = null, unsubT = null;
 // marca padrão de cada app (vale antes da primeira transmissão)
 const MARCA = {
   lmb: { titulo: "Liga Metropolitana de Biribol", logo: "logo.png", escura: "#0b2554", cor: "#1597dc", destaque: "#f6d20b" },
@@ -91,6 +91,18 @@ const MARCA = {
 function pintarRodizio() {
   const box = $("rz");
   if (E && E.sim) J = av.simNoTempo(E.esporte || "biribol", E, Date.now());
+  if (E && E.simBq) J = av.simBqNoTempo(E, Date.now());
+  if (E && E.manual) J = av.jogoManual(E.manual);
+  // basquete: quadra com os 5 de cada equipe e as faltas (mesa da súmula, simulação ou jogadores do placar à mão)
+  if (COM_RZ && E && E.aoVivo && J && (E.esporte || "biribol") !== "biribol") {
+    const est = J.mesa ? BQ.estado(J) : J.mjog ? BQ.estadoManual(J.mjog) : null;
+    box.textContent = "";
+    if (!est) { box.classList.remove("on"); return; }
+    const num = id => { if (J.mjog) return BQ.numManual(J.mjog, id); if (J.simAtl && J.simAtl[id]) return J.simAtl[id].num; for (const e of ((T && T.equipes) || [])) { const a = (e.atletas || []).find(x => x.id === id); if (a) return a.num; } return null; };
+    const cap = J.capitaes || (T ? { a: ((T.equipes || []).find(e => e.id === J.a) || {}).capitao, b: ((T.equipes || []).find(e => e.id === J.b) || {}).capitao } : null);
+    box.append(BQ.quadra({ est, num, nomes: { a: E.nomeA || "Equipe A", b: E.nomeB || "Equipe B" }, capitaes: cap }));
+    box.classList.add("on"); return;
+  }
   const rz = COM_RZ && E && E.aoVivo && J && !E.manual && J.rodizio;
   const i = rz ? R.setComFormacao(rz, Math.max(0, (J.sets || []).length - 1)) : -1;
   if (i < 0) { box.classList.remove("on"); box.textContent = ""; return; }
@@ -126,14 +138,14 @@ function pintar() {
   const tag = $("tag"); tag.textContent = "";
   if (!p.fim) { const v = document.createElement("span"); v.className = "vivo"; v.textContent = "AO VIVO"; tag.append(v); }
   // basquete com mesa: seta de posse, faltas de equipe (PENALIDADE a partir da 5ª), tempos e relógios
-  const est = esp !== "biribol" && J && J.mesa && !p.fim ? BQ.estado(J) : null, ra = est ? BQ.relogioAgora(J.mesa) : null;
+  const est = esp !== "biribol" && J && !p.fim ? (J.mesa ? BQ.estado(J) : J.mjog ? BQ.estadoManual(J.mjog) : null) : null, ra = est && J.mesa ? BQ.relogioAgora(J.mesa) : null;
   document.body.classList.toggle("mesa", !!est);
   if (est) ["a", "b"].forEach(l => {
     const x = $("x" + l); x.textContent = "";
     const pos = document.createElement("span"); pos.className = "pos" + (est.seta === l ? " on" : ""); pos.title = "Posse alternada";
     const fe = BQ.faltasEquipe(est, l), f = document.createElement("span"); f.className = "fe" + (fe >= 4 ? " pen" : ""); f.textContent = fe >= 4 ? "BÔNUS" : "F " + fe;
     const td = BQ.temposDisponiveis(est, l, est.q, ra ? ra.rest : null), mx = BQ.temposMax(est.q), to = document.createElement("span"); to.className = "to"; to.title = "Tempos restantes";
-    for (let i = 0; i < mx; i++) { const b = document.createElement("i"); if (i < td) b.className = "on"; to.append(b); }
+    if (!est.manual) for (let i = 0; i < mx; i++) { const b = document.createElement("i"); if (i < td) b.className = "on"; to.append(b); }
     x.append(pos, f, to);
   });
   tag.append([p.fim ? "Final do jogo" : esp === "biribol" ? p.rotAtual : est ? BQ.nomeQ(est.q) : p.rotAtual + " · " + (p.atual[0]) + "-" + (p.atual[1]), E.rotulo].filter(Boolean).join(" · "));
@@ -151,7 +163,9 @@ setInterval(() => { if (!E || !E.aoVivo || !E.simAuto) return; const n = av.simP
 onSnapshot(doc(db, "ao_vivo", APP), s => {
   E = s.exists() ? s.data() : null;
   const k = E && E.torneioId && E.jogoId ? (E.col) + "/" + E.torneioId + "/" + E.jogoId : "";
-  if (k !== chave) { chave = k; if (unsub) unsub(); unsub = null; J = null; if (k) unsub = onSnapshot(doc(db, E.col, E.torneioId, "jogos", E.jogoId), d => { J = d.exists() ? { id: d.id, ...d.data() } : null; pintar(); }); }
+  if (k !== chave) { chave = k; if (unsub) unsub(); if (unsubT) unsubT(); unsub = unsubT = null; J = null; T = null;
+    if (k) { unsub = onSnapshot(doc(db, E.col, E.torneioId, "jogos", E.jogoId), d => { J = d.exists() ? { id: d.id, ...d.data() } : null; pintar(); });
+      if (COM_RZ) unsubT = onSnapshot(doc(db, E.col, E.torneioId), d => { T = d.exists() ? d.data() : null; pintar(); }); } } // números dos atletas para a quadra
   pintar();
 }, e => console.error(e));
 </script>
