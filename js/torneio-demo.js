@@ -5,6 +5,7 @@ import * as C from "./torneio-core.js";
 function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 
 const NOMES = ["Adriano","Bruno","Caio","Danilo","Eduardo","Fábio","Gustavo","Heitor","Igor","João","Kauã","Leandro","Marcelo","Nícolas","Otávio","Paulo","Rafael","Sérgio","Tiago","Vinícius","Wagner","Yuri","André","Beto","Cláudio","Diego","Émerson","Felipe","Gabriel","Hugo","Ivan","Júlio","Lucas","Mateus","Nelson","Osmar","Pedro","Renato","Samuel","Túlio","Ulisses","Vitor","Willian","Alex","Breno","César","Davi","Enzo","Flávio","Guilherme","Henrique","Isaque","Jonas","Léo","Murilo","Nando","Orlando","Pietro","Ronaldo","Saulo","Teo","Valter","Xande","Zeca","Álvaro","Bento","Cristiano","Douglas","Elias","Fernando","Geraldo","Hélio","Ítalo","Jairo","Kleber","Luan","Márcio","Natan","Oscar","Paulinho","Rodrigo","Silvio","Thiago","Vagner"];
+const ARBITROS = ["Paulo Henrique Dias", "Cláudia Martins", "Roberto Assis", "Fernanda Lopes", "Gilberto Rocha", "Simone Teixeira"];
 const TECNICOS = ["Carlos Mendes", "Rogério Lima", "Sandra Alves", "Marcos Paiva", "Luciana Costa", "Edson Ramos", "Patrícia Souza", "Valdir Nogueira", "Renata Prado", "Wilson Faria", "Ana Paula Reis", "Jorge Matos"];
 const SOBRE = ["Silva","Souza","Oliveira","Santos","Lima","Pereira","Costa","Ribeiro","Alves","Carvalho","Gomes","Martins","Rocha","Barbosa","Moreira","Teixeira","Freitas","Mendes","Cardoso","Nunes"];
 const EQ_BIRIBOL = ["Tubarões da AEM","Piratas do Lago","Golfinhos Mococa","Arraias FC","Marlins","Orcas","Lontras","Baleias Azuis","Focas","Polvos","Tritões","Moreias","Siris","Peixe-Espada","Barracudas","Cavalos-Marinhos","Pinguins","Ariranhas","Jacarés","Garoupas","Pirarucus","Dourados","Lambaris","Tilápias"];
@@ -219,6 +220,9 @@ export function gerarDemo(esporte, nomeDemo, opts = {}) {
     j.sancoes = sc;
   });
 
-  const torneio = { nome: "[DEMO] " + (nomeDemo || (BIR ? "Copa Biribol Mococa" : "Copa Família Basquete Mococa")), demo: true, equipes, etapas, criado: Date.now() };
+  // dupla de arbitragem em todos os jogos disputados (6 árbitros fictícios em rodízio)
+  const arbitros = ARBITROS.slice(0, 6);
+  jogos.filter(j => j.a && j.b && !j.wo && j.status !== "agendado").forEach((j, i) => { const k = i % arbitros.length; j.arbitros = { a1: arbitros[k], a2: arbitros[(k + 1 + (Math.floor(i / arbitros.length) % (arbitros.length - 1))) % arbitros.length] }; });
+  const torneio = { nome: "[DEMO] " + (nomeDemo || (BIR ? "Copa Biribol Mococa" : "Copa Família Basquete Mococa")), demo: true, equipes, etapas, arbitros, criado: Date.now() };
   return { torneio, jogos: jogos.map(j => ({ ...j, criado: Date.now() })) };
 }

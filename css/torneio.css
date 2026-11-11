@@ -427,3 +427,12 @@ td.t-am{color:#b38900;font-weight:700}td.t-vm{color:#e0282e;font-weight:700}
 .avj-add{display:flex;gap:6px;flex-wrap:wrap}
 .avj-add input[name=num]{width:64px}.avj-add input[name=nome]{flex:1 1 140px;min-width:0}
 .avj-sug{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+/* dupla de arbitragem: cadastro do torneio (aba Equipes) e escolha por jogo (súmula) */
+.t-arb{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--line,#3334);border-radius:12px;margin:8px 0}
+.t-arblin{display:flex;gap:8px;flex-wrap:wrap}.t-arblin>.t-lbl{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);flex:1 1 150px;min-width:0}
+.t-arblin input{width:100%;min-width:0}
+.t-arbro{margin:4px 0 8px}
+.t-arbchips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
+.t-arbchip{display:inline-flex;align-items:center;gap:4px;padding:4px 6px 4px 10px;border-radius:999px;border:1px solid var(--line,#3334);font-size:13px}
+.t-arbx{border:0;background:none;color:inherit;opacity:.6;cursor:pointer;font-size:16px;line-height:1;padding:0 4px;min-height:0}
+.t-arbx:hover{opacity:1}

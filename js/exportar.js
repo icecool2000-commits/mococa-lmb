@@ -776,7 +776,10 @@ function dadosSumula(T, j, esporte) {
   // mesa do basquete: faltas de equipe por quarto (prorrogação = 4º), tempos, técnico, lances livres
   const mesa = MS ? ["a", "b"].map(l => { const e = MS.eq[l]; return [eq(j[l]).nome, e.porQ["1Q"] || 0, e.porQ["2Q"] || 0, e.porQ["3Q"] || 0, e.porQ["4Q"] || 0, e.f, e.tempos,
     [e.tecC && e.tecC + " C", e.tecB && e.tecB + " B", e.tecD && "D"].filter(Boolean).join(" ") + (e.tecFora ? " (desq.)" : "") || "0", e.llc + "/" + e.llt]; }) : null;
-  return { BIR, et, lados, parciais, placar, sancoes, incompleta, temCart, mesa, resultado, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };
+  const A = j.arbitros || {}, arbitros = [A.a1 && "1º árbitro: " + A.a1, A.a2 && "2º árbitro: " + A.a2].filter(Boolean).join("   ·   ");
+  // assinaturas: dupla de arbitragem, mesário, capitães e técnicos
+  const assinaturas = ["1º árbitro" + (A.a1 ? " – " + A.a1 : ""), "2º árbitro" + (A.a2 ? " – " + A.a2 : ""), "Mesário / anotador", ...lados.map(l => "Capitão – " + l.nome + (l.capitao ? " (" + l.capitao + ")" : "")), ...lados.filter(l => l.tecnico).map(l => "Técnico – " + l.nome + " (" + l.tecnico + ")")];
+  return { BIR, et, lados, parciais, placar, sancoes, incompleta, temCart, mesa, resultado, arbitros, assinaturas, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };
 }
 const nomeSumula = (T, j, D, ext) => arquivo(T, "sumula-" + (D.lados[0].nome + "-x-" + D.lados[1].nome).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase() + "." + ext);
 
@@ -785,6 +788,7 @@ export async function sumulaPDF(T, j, esporte, marca) {
   const doc = pdfBase(jsPDF, marca, { T }, "Súmula"), m = marca, W = doc.internal.pageSize.getWidth();
   let y = cabecalho(doc, logo, "Súmula da partida", D.info);
   doc.setFontSize(9.5); doc.setTextColor("#555"); doc.text(D.quando, 10, y - 3); doc.setTextColor("#1a1a1a");
+  if (D.arbitros) { doc.setFontSize(9.5); doc.setFont("helvetica", "bold"); doc.setTextColor("#333"); doc.text("Arbitragem – " + D.arbitros, 10, y + 1.5); doc.setFont("helvetica", "normal"); doc.setTextColor("#1a1a1a"); y += 6; }
   // placar
   doc.setFillColor("#f3f6fa"); doc.setDrawColor("#cfd6de"); doc.roundedRect(10, y, W - 20, 30, 2, 2, "FD");
   doc.setFont("helvetica", "bold"); doc.setFontSize(13);
@@ -821,7 +825,8 @@ export async function sumulaPDF(T, j, esporte, marca) {
   // assinaturas
   if (y > doc.internal.pageSize.getHeight() - 36) { doc.addPage(); y = cabecalho(doc, logo, "Súmula da partida", D.info); }
   y += 8; doc.setDrawColor("#888"); doc.setLineWidth(0.3); doc.setFontSize(8.5); doc.setTextColor("#555");
-  const ass = ["Árbitro", "Mesário / anotador", ...D.lados.map(l => "Capitão – " + l.nome + (l.capitao ? " (" + l.capitao + ")" : "")), ...D.lados.filter(l => l.tecnico).map(l => "Técnico – " + l.nome + " (" + l.tecnico + ")")], cw = (W - 30) / 2;
+  const ass = D.assinaturas, cw = (W - 30) / 2;
+  if (y + Math.ceil(ass.length / 2) * 15 > doc.internal.pageSize.getHeight() - 12) { doc.addPage(); y = cabecalho(doc, logo, "Súmula da partida", D.info) + 8; }
   ass.forEach((t, i) => { const x = 10 + (i % 2) * (cw + 10), yy = y + Math.floor(i / 2) * 15; doc.line(x, yy, x + cw, yy); doc.text(doc.splitTextToSize(t, cw)[0], x, yy + 4.5); });
   rodapes(doc);
   doc.save(nomeSumula(T, j, D, "pdf"));
@@ -831,6 +836,7 @@ export async function sumulaXLSX(T, j, esporte, marca) {
   const ExcelJS = await libXLSX(), logo = await logoDataUrl(marca.logo, marca.fundoLogo), E = estilos(marca), D = dadosSumula(T, j, esporte);
   const wb = new ExcelJS.Workbook(); wb.creator = marca.titulo; wb.created = new Date();
   const ws = folha(wb, "Súmula", marca, logo, "Súmula da partida", D.info + (D.quando ? " · " + D.quando : ""), [8, 30, 12, 12, 12], false);
+  if (D.arbitros) { tituloSecao(ws, "Arbitragem – " + D.arbitros, E); ws.__linha++; }
   tituloSecao(ws, "Placar", E);
   tabelaXL(ws, ["", D.lados[0].nome, "", D.lados[1].nome, ""], [["Placar", D.lados[0].venceu ? "VENCEDORA" : "", D.placar.split(" x ")[0], D.lados[1].venceu ? "VENCEDORA" : "", D.placar.split(" x ")[1]], ["Resultado", D.resultado, "", "", ""]], E, { esq: [0, 1], negrito: [2, 4], altura: 22 });
   tituloSecao(ws, D.BIR ? "Sets" : "Períodos", E);
@@ -845,7 +851,7 @@ export async function sumulaXLSX(T, j, esporte, marca) {
   if (D.sancoes.length || D.incompleta) { tituloSecao(ws, "Sanções", E); tabelaXL(ws, ["Sanção", "Equipe", "Quem", "Set", "Placar"], [...D.sancoes, ...(D.incompleta ? [[D.incompleta, "", "", "", ""]] : [])], E, { esq: [0, 1, 2] }); }
   if (D.destaque) { tituloSecao(ws, (D.BIR ? "Maior pontuador: " : "Cestinha: ") + D.destaque.nome + " (" + D.destaque.eq + ") – " + D.destaque.p + " pontos", E); ws.__linha++; }
   tituloSecao(ws, "Assinaturas", E);
-  ["Árbitro", "Mesário / anotador", ...D.lados.map(l => "Capitão – " + l.nome + (l.capitao ? " (" + l.capitao + ")" : "")), ...D.lados.filter(l => l.tecnico).map(l => "Técnico – " + l.nome + " (" + l.tecnico + ")")].forEach(t => {
+  D.assinaturas.forEach(t => {
     const r = ws.__linha; ws.getRow(r).height = 30; ws.getCell(r, 1).value = t; ws.getCell(r, 1).font = { name: "Calibri", size: 10, color: { argb: "FF555555" } };
     ws.mergeCells(r, 2, r, 5); ws.getCell(r, 2).border = { bottom: { style: "thin", color: { argb: "FF888888" } } }; ws.__linha = r + 1;
   });

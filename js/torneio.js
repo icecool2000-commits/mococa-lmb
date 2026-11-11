@@ -372,7 +372,37 @@ export function montarTorneio(ctx) {
       }
       w.append(card);
     });
+    w.append(cardArbitragem());
     return w;
+  }
+  // equipe de arbitragem do torneio (T.arbitros = ["nome", ...]); cada jogo escolhe a dupla na súmula (j.arbitros = {a1, a2})
+  const arbitrosDoTorneio = () => [...new Set([...(T.arbitros || []), ...jogos.flatMap(j => j.arbitros ? [j.arbitros.a1, j.arbitros.a2] : [])].map(x => (x || "").trim()).filter(Boolean))].sort((x, y) => x.localeCompare(y, "pt-BR"));
+  function cardArbitragem() {
+    const card = h("div", { class: "t-card t-arbcad" }, h("h3", { text: "Equipe de arbitragem" }));
+    const lista = T.arbitros || [];
+    if (!podeEditar()) { card.append(lista.length ? h("div", { class: "t-arbchips" }, lista.map(n => h("span", { class: "t-arbchip", text: n }))) : h("p", { class: "cap", text: "Árbitros ainda não cadastrados." })); return card; }
+    card.append(h("p", { class: "cap", text: "Cadastre os árbitros do torneio. Na súmula de cada jogo você escolhe a dupla (1º e 2º árbitro), que sai na súmula em PDF/Excel com o espaço para assinatura." }));
+    if (lista.length) card.append(h("div", { class: "t-arbchips" }, lista.map(n => h("span", { class: "t-arbchip" }, n,
+      h("button", { type: "button", class: "t-arbx", "aria-label": "Tirar " + n, onclick: () => salvarTorneio({ arbitros: lista.filter(x => x !== n) }) }, "×")))));
+    const f = h("form", { class: "t-atleta t-novo", onsubmit: e => {
+      e.preventDefault(); const nm = f.querySelector("input").value.trim().replace(/\s+/g, " ");
+      if (!nm) return; if (lista.some(x => x.toLowerCase() === nm.toLowerCase())) { toast(nm + " já está na lista."); return; }
+      salvarTorneio({ arbitros: [...lista, nm.slice(0, 40)] }).then(() => { const n = document.getElementById("arb-novo"); if (n) n.focus(); });
+    } }, h("input", { id: "arb-novo", placeholder: "Nome do árbitro", maxlength: 40, "aria-label": "Nome do novo árbitro" }), h("button", { type: "submit", class: "t-mini" }, "+"));
+    card.append(f);
+    return card;
+  }
+  // dupla de arbitragem do jogo, na súmula
+  function blocoArbitragem(j, ed) {
+    const A = j.arbitros || {}, nomes = arbitrosDoTorneio();
+    if (!ed) return (A.a1 || A.a2) ? h("p", { class: "cap t-arbro", text: "Arbitragem: " + [A.a1 && "1º árbitro " + A.a1, A.a2 && "2º árbitro " + A.a2].filter(Boolean).join(" · ") }) : null;
+    const dl = h("datalist", { id: "t-arb-dl" }, nomes.map(n => h("option", { value: n })));
+    const campo = (k, rot) => h("label", { class: "t-lbl" }, rot, h("input", { value: A[k] || "", maxlength: 40, list: "t-arb-dl", placeholder: nomes.length ? "Escolha ou digite" : "Nome do árbitro", autocomplete: "off",
+      onchange: e => { const v = e.target.value.trim().replace(/\s+/g, " ").slice(0, 40); j.arbitros = { ...(j.arbitros || {}), [k]: v };
+        if (v && !(T.arbitros || []).some(x => x.toLowerCase() === v.toLowerCase())) salvarTorneio({ arbitros: [...(T.arbitros || []), v] });
+        salvarSumula(true); } }));
+    return h("div", { class: "t-arb" }, h("b", { text: "Dupla de arbitragem" }), h("div", { class: "t-arblin" }, campo("a1", "1º árbitro"), campo("a2", "2º árbitro")), dl,
+      !(A.a1 && A.a2) && h("p", { class: "cap", text: "Os dois árbitros saem na súmula em PDF/Excel, com o espaço para assinatura." }));
   }
   function mudarAtleta(eid, aid, campos) {
     const eqs = T.equipes.map(x => x.id !== eid ? x : { ...x, ...(campos === null && x.capitao === aid ? { capitao: null } : {}), atletas: campos === null ? x.atletas.filter(a => a.id !== aid) : x.atletas.map(a => a.id === aid ? { ...a, ...campos } : a) });
@@ -825,6 +855,7 @@ export function montarTorneio(ctx) {
     const peTopo = l => h("div", { class: "t-pe" + (fim && r.venc === j[l] ? " venc" : "") }, h("span", { text: eqNome(j[l]) }), h("b", { text: BIR ? (l === "a" ? r.sa : r.sb) : (l === "a" ? r.pa : r.pb) }));
     painel.append(h("div", { class: "t-placar" }, peTopo(ladoTopo[0]), h("div", { class: "t-x", text: "x" }), peTopo(ladoTopo[1])));
     if (fim) painel.append(h("p", { class: "t-res", text: r.empate ? "Empate" : "Vitória de " + eqNome(r.venc) + (j.periodos && j.periodos.some(p => p.n === "BO") ? " na bola de ouro" : j.periodos && j.periodos.some(p => /^P/.test(p.n)) ? " na prorrogação" : "") }));
+    if (j.a && j.b && !j.wo) { const ba = blocoArbitragem(j, ed); if (ba) painel.append(ba); }
     // atletas com amarelo + vermelho em outros jogos deste torneio (etapa) ficam fora deste jogo
     R.definirDesqualificados(LIGA_CART ? R.desqualificadosDe(jogos.filter(x => x.id !== j.id)) : []);
     // rodízio (formação, saque, substituições e a piscina com os jogadores) logo abaixo do placar
@@ -1132,6 +1163,17 @@ export function montarTorneio(ctx) {
           h("tbody", null, comissao.map(l => h("tr", null, l.map(v => h("td", { class: "l", text: v })))))))));
       rel.blocos.push({ t: "tabela", titulo: "Técnicos e capitães", cab: ["Equipe", "Técnico", "Capitão"], esq: [0, 1, 2], linhas: comissao });
     }
+    // arbitragem: jogos apitados por árbitro (1º e 2º)
+    { const porArb = {};
+      jogos.filter(j => (filtroEtapa === "todas" || j.etapa === +filtroEtapa) && (filtroFase === "todas" || faseDe(j) === filtroFase) && j.arbitros && !j.wo)
+        .forEach(j => [["a1", 0], ["a2", 1]].forEach(([k, i]) => { const n = (j.arbitros[k] || "").trim(); if (!n) return; const P = porArb[n.toLowerCase()] || (porArb[n.toLowerCase()] = { nome: n, c: [0, 0] }); P.c[i]++; }));
+      const la = Object.values(porArb).sort((x, y) => (y.c[0] + y.c[1]) - (x.c[0] + x.c[1]) || x.nome.localeCompare(y.nome, "pt-BR")).map(P => [P.nome, P.c[0], P.c[1], P.c[0] + P.c[1]]);
+      if (la.length) {
+        w.append(h("div", { class: "card" }, h("h3", { text: "Arbitragem" }), h("p", { class: "cap", text: "Jogos de cada árbitro como 1º e 2º árbitro" }),
+          h("div", { class: "tablebox" }, h("table", { class: "t-tab" }, h("thead", null, h("tr", null, h("th", { class: "l", text: "Árbitro" }), h("th", { text: "1º árbitro" }), h("th", { text: "2º árbitro" }), h("th", { text: "Jogos" }))),
+            h("tbody", null, la.map(l => h("tr", null, h("td", { class: "l", text: l[0] }), h("td", { text: l[1] }), h("td", { text: l[2] }), h("td", { text: l[3] }))))))));
+        rel.blocos.push({ t: "tabela", titulo: "Arbitragem", cap: "Jogos de cada árbitro como 1º e 2º árbitro", cab: ["Árbitro", "1º árbitro", "2º árbitro", "Jogos"], esq: [0], linhas: la });
+      } }
     // disciplina: cartões e sanções do filtro escolhido (biribol)
     if (BIR) {
       const jsF = jogos.filter(j => (filtroEtapa === "todas" || j.etapa === +filtroEtapa) && (filtroFase === "todas" || faseDe(j) === filtroFase));
