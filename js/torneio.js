@@ -107,6 +107,8 @@ export function montarTorneio(ctx) {
   /* ---------- tela principal ---------- */
   function render() {
     const foco = document.activeElement && document.activeElement.id;
+    // a súmula rola por dentro e é redesenhada a cada ponto: guarda a posição para não voltar ao topo
+    const sumAntes = root.querySelector(".t-sumula"), rolSum = sumAntes ? sumAntes.scrollTop : 0, rolJan = window.scrollY;
     // a aba Ao vivo fica no lugar (o vídeo do YouTube não pode recarregar a cada ponto marcado)
     const fica = AV && aba === "aovivo" && T && !formNovo ? AV.elemento : null;
     [...root.childNodes].forEach(c => { if (c !== fica) c.remove(); });
@@ -114,7 +116,10 @@ export function montarTorneio(ctx) {
     const pos = root.append.bind(root);
     root.append = (...ns) => ns.forEach(n => { if (n === fica) { antesDoFica = false; if (n.parentNode !== root) pos(n); } else if (antesDoFica && fica && fica.parentNode === root) root.insertBefore(n, fica); else pos(n); });
     try { renderCorpo(); } finally { delete root.append; }
-    if (foco) { const f = document.getElementById(foco); if (f && f.tagName === "INPUT" && f !== document.activeElement) f.focus(); }
+    if (foco) { const f = document.getElementById(foco); if (f && f.tagName === "INPUT" && f !== document.activeElement) f.focus({ preventScroll: true }); }
+    const sumDepois = root.querySelector(".t-sumula");
+    if (sumAntes && sumDepois && rolSum) sumDepois.scrollTop = rolSum;
+    if (!sumAntes && !sumDepois && Math.abs(window.scrollY - rolJan) > 1) window.scrollTo(0, rolJan);
   }
   function renderCorpo() {
     root.append(barraTopo());
@@ -1007,13 +1012,14 @@ export function montarTorneio(ctx) {
       painel.append(h("div", { class: "t-pontos" }, ["a", "b"].map(l => h("div", { class: "t-pcol" },
         h("span", { class: "cap", text: eqNome(j[l]) + " · " + nomeP(sel) }),
         h("b", { class: "t-pnum", text: p[l] }),
-        h("div", { class: "t-linha" }, h("button", { type: "button", class: "ghost t-pbtn", onclick: () => { periodoSel = sel; pontoEquipe(l, 1); } }, "+1"), h("button", { type: "button", class: "ghost t-pbtn", onclick: () => { periodoSel = sel; pontoEquipe(l, -1); } }, "−1"))))));
+        h("div", { class: "t-linha t-pbtns" }, [1, 2, 3].map(v => h("button", { type: "button", class: "t-pbtn", onclick: () => { periodoSel = sel; pontoEquipe(l, v); } }, "+" + v)),
+          h("button", { type: "button", class: "ghost t-pbtn", onclick: () => { periodoSel = sel; pontoEquipe(l, -1); } }, "−1"))))));
       const r = res(j), mata = j.fase === "mata", empatado = r.pa === r.pb;
       const temQ4 = j.periodos.length >= 4;
       painel.append(h("div", { class: "t-linha" },
         h("button", { type: "button", class: "ghost t-mini", disabled: !(temQ4 && empatado) || j.periodos.some(x => x.n === "BO"), onclick: () => { const n = "P" + (j.periodos.filter(x => /^P/.test(x.n)).length + 1); j.periodos.push({ n, a: 0, b: 0 }); periodoSel = n; cron.rest = 300; salvarSumula(); } }, "+ Prorrogação"),
         mata && h("button", { type: "button", class: "ghost t-mini", disabled: !(temQ4 && empatado) || j.periodos.some(x => x.n === "BO"), onclick: () => { j.periodos.push({ n: "BO", a: 0, b: 0 }); periodoSel = "BO"; salvarSumula(); toast("Bola de ouro: um ataque para cada; quem pontuar primeiro vence."); } }, "Bola de ouro")));
-      painel.append(h("p", { class: "cap", text: "Os pontos do atleta (+1, +2, +3) entram no placar do período selecionado. Use o +1 da equipe só para corrigir pontos sem atleta." }));
+      painel.append(h("p", { class: "cap", text: "Os pontos (+1, +2, +3) entram no placar do período selecionado. Com os atletas cadastrados, marque pelo atleta para ter as estatísticas; os botões da equipe servem para jogo sem atletas ou para corrigir." }));
     }
   }
   function iniciarCron() { if (cron.rodando) return; cron.rodando = true; cron.t = setInterval(() => { cron.rest = Math.max(0, cron.rest - 1); const v = document.getElementById("t-cron-v"); if (v) v.textContent = pad(Math.floor(cron.rest / 60)) + ":" + pad(cron.rest % 60); if (!cron.rest) { pararCron(); toast("Fim do tempo do período."); render(); } }, 1000); render(); }
