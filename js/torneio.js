@@ -20,7 +20,7 @@ export function montarTorneio(ctx) {
 
   let torneios = [], tid = ls.get("tid"), T = null, jogos = [], aba = ls.get("aba") || "geral", etapaSel = 0;
   let unsubJogos = null, sumulaJid = null, sumulaLocal = null, salvarTimer = null, filtroEtapa = "todas", filtroFase = "todas", equipeSel = null;
-  let formNovo = false, editandoGeral = false, sorteioRascunho = null, confirmar = null, montagem = null;
+  let formNovo = false, editandoGeral = false, sorteioRascunho = null, confirmar = null, montagem = null, livreEd = null;
 
   /* ---------- utilitários de tela ---------- */
   function h(tag, props, ...kids) {
@@ -40,6 +40,15 @@ export function montarTorneio(ctx) {
   const fmtData = s => { if (!s) return ""; const [y, m, d] = s.split("-"); return d + "/" + m + "/" + y; };
   const eqNome = id => (T && T.equipes.find(e => e.id === id) || {}).nome || "—";
   const eqDe = id => T && T.equipes.find(e => e.id === id);
+  // escudo da equipe (equipe.escudo = imagem pequena em data URL) acompanha o nome em jogos, súmula, classificação e placar
+  const escudoDe = id => (eqDe(id) || {}).escudo || null;
+  const eqTag = (id, txt) => { const e = escudoDe(id); return h("span", { class: "t-eqn" }, e && h("img", { class: "t-esc", src: e, alt: "" }), h("span", { text: txt ?? eqNome(id) })); };
+  // data, horário e local de cada jogo (j.data, j.hora, j.local); sem isso vale o da etapa. et.localUnico !== false = todos no local da etapa
+  const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  const fmtDia = s => { if (!s) return ""; const [y, m, d] = s.split("-").map(Number); return DIAS[new Date(y, m - 1, d).getDay()] + " " + pad(d) + "/" + pad(m); };
+  const localJogo = j => { const et = T.etapas[j.etapa] || {}; return (et.localUnico === false && j.local) || et.local || j.local || ""; };
+  const quandoCurto = j => { const et = T.etapas[j.etapa] || {}; if (!j.data && !j.hora) return ""; return [fmtDia(j.data || et.data), j.hora || et.hora, et.localUnico === false && j.local && j.local !== et.local ? j.local : ""].filter(Boolean).join(" · "); };
+  const quandoCompleto = j => { const et = T.etapas[j.etapa] || {}; return [fmtData(j.data || et.data), j.hora || et.hora, localJogo(j)].filter(Boolean).join(" · "); };
   // capitão de cada equipe (equipe.capitao = id do atleta) aparece como "(C)" em todo lugar; técnico = equipe.tecnico
   const capTag = (e, a) => e && a && e.capitao === a.id ? " (C)" : "";
   const atletaDe = aid => { for (const e of (T ? T.equipes : [])) { const a = (e.atletas || []).find(x => x.id === aid); if (a) return { ...a, nome: a.nome + capTag(e, a), eid: e.id, enome: e.nome }; } return null; };
@@ -232,14 +241,16 @@ export function montarTorneio(ctx) {
     if (editandoGeral && podeEditar()) {
       const f = h("form", { class: "t-card t-form", onsubmit: async e => {
         e.preventDefault();
-        const etapas = T.etapas.map((et, i) => ({ ...et, nome: f.querySelector("#ge-n" + i).value.trim() || et.nome, local: f.querySelector("#ge-l" + i).value.trim(), data: f.querySelector("#ge-d" + i).value, hora: f.querySelector("#ge-h" + i).value }));
+        const etapas = T.etapas.map((et, i) => ({ ...et, nome: f.querySelector("#ge-n" + i).value.trim() || et.nome, local: f.querySelector("#ge-l" + i).value.trim(), data: f.querySelector("#ge-d" + i).value, hora: f.querySelector("#ge-h" + i).value, localUnico: f.querySelector("#ge-lu" + i).checked }));
         await salvarTorneio({ nome: f.querySelector("#ge-nome").value.trim() || T.nome, etapas }); editandoGeral = false; toast("Torneio salvo."); render();
       } },
         h("label", { class: "t-lbl" }, "Nome do torneio", h("input", { id: "ge-nome", value: T.nome, maxlength: 60 })),
         T.etapas.map((et, i) => h("div", { class: "t-etapa-form" },
           h("input", { id: "ge-n" + i, value: et.nome, "aria-label": "Nome da etapa" }),
           h("input", { id: "ge-l" + i, value: et.local || "", placeholder: "Local", "aria-label": "Local" }),
-          h("div", { class: "t-linha" }, h("input", { id: "ge-d" + i, type: "date", value: et.data || "", "aria-label": "Data" }), h("input", { id: "ge-h" + i, type: "time", value: et.hora || "", "aria-label": "Horário" })))),
+          h("div", { class: "t-linha" }, h("input", { id: "ge-d" + i, type: "date", value: et.data || "", "aria-label": "Data" }), h("input", { id: "ge-h" + i, type: "time", value: et.hora || "", "aria-label": "Horário" })),
+          h("label", { class: "t-chk" }, h("input", { id: "ge-lu" + i, type: "checkbox", checked: et.localUnico !== false }), "Todos os jogos neste local (cada jogo muda só a data e o horário)"),
+          h("p", { class: "cap", text: "A data e o horário acima valem para o 1º jogo. Os de cada jogo ficam em Chaves e jogos → Datas, horários e locais." }))),
         h("div", { class: "t-linha" },
           h("button", { type: "submit" }, "Salvar"),
           h("button", { type: "button", class: "ghost", onclick: () => salvarTorneio({ etapas: [...T.etapas, { id: C.uid("s"), nome: (T.etapas.length + 1) + "ª etapa", local: "AEM", data: "", hora: BIR ? "19:00" : "10:00" }] }) }, "+ Etapa"),
@@ -283,7 +294,7 @@ export function montarTorneio(ctx) {
           T.etapas.map((et, i) => h("th", { text: nE > 1 ? "Et. " + (i + 1) : "Etapa", title: et.nome })), h("th", { text: "J" }), h("th", { text: "V" }), !BIR && h("th", { text: "E" }), h("th", { text: "D" }),
           BIR && h("th", { text: "Sets" }), h("th", { text: "Saldo" }), h("th", { text: "PF" }), h("th", { text: temSerie ? "Medalhas" : "Pódios" }))),
         h("tbody", null, G.linhas.map((r, i) => h("tr", { class: i < 3 && r.j ? "podio p" + (i + 1) : "" },
-          h("td", { text: (i + 1) + "º" }), h("td", { class: "l", text: eqNome(r.eid) }), ctx.pontuacao && h("td", { text: r.pts }), PTS() && !ctx.pontuacao && h("td", { class: "t-pts", text: r.pg }),
+          h("td", { text: (i + 1) + "º" }), h("td", { class: "l" }, eqTag(r.eid)), ctx.pontuacao && h("td", { text: r.pts }), PTS() && !ctx.pontuacao && h("td", { class: "t-pts", text: r.pg }),
           r.etapas.map(x => h("td", { text: posTxt(x), title: x && x.serie != null ? C.SERIES[x.serie] : null })), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }),
           BIR && h("td", { text: r.sv + "–" + r.sp }), h("td", { class: "saldo " + (r.saldo > 0 ? "pos" : r.saldo < 0 ? "neg" : ""), text: sv(r.saldo) }), h("td", { text: r.pf }),
           h("td", { text: r.medalhas.map((n, k) => n ? n + MED[k] : "").filter(Boolean).join(" ") || "–" })))))),
@@ -298,7 +309,7 @@ export function montarTorneio(ctx) {
       h("div", { class: "tablebox" }, h("table", { class: "t-tab" },
         h("thead", null, h("tr", null, h("th", { text: "#" }), h("th", { class: "l", text: "Equipe" }), h("th", { class: "l", text: "Chegou até" }), h("th", { text: "V" }), h("th", { text: "D" }), h("th", { text: "Saldo" }))),
         h("tbody", null, c.ordem.map(x => h("tr", { class: x.pos <= 3 && c.completa ? "podio p" + x.pos : "" },
-          h("td", { text: x.pos + "º" }), h("td", { class: "l", text: eqNome(x.eid) }),
+          h("td", { text: x.pos + "º" }), h("td", { class: "l" }, eqTag(x.eid)),
           h("td", { class: "l", text: (x.medalha && c.completa ? MED[x.medalha - 1] + " " : "") + (x.serie != null && !String(x.rot).startsWith("Série") ? C.SERIES[x.serie] + " · " : "") + (x.rot || "") }),
           h("td", { text: x.v }), h("td", { text: x.d }), h("td", { text: (x.saldo > 0 ? "+" : "") + x.saldo })))))));
   }
@@ -346,6 +357,7 @@ export function montarTorneio(ctx) {
           h("button", { type: "button", class: "danger t-mini", onclick: () => {
             if (jogos.some(j => j.a === eq.id || j.b === eq.id)) { toast("Essa equipe já tem jogos no chaveamento. Refaça o sorteio antes de remover."); return; }
             perguntar("Remover a equipe " + eq.nome + "?", () => salvarTorneio({ equipes: T.equipes.filter(x => x.id !== eq.id) }), "Remover"); } }, "Remover")));
+        card.append(blocoEscudo(eq));
         card.append(h("label", { class: "t-lbl t-tec" }, "Técnico (opcional)",
           h("input", { id: "eq-t-" + eq.id, value: eq.tecnico || "", maxlength: 40, placeholder: "Nome do técnico", onchange: e => salvarTorneio({ equipes: T.equipes.map(x => x.id === eq.id ? { ...x, tecnico: e.target.value.trim() } : x) }) })));
         const lista = h("div", { class: "t-atletas" });
@@ -370,7 +382,7 @@ export function montarTorneio(ctx) {
           card.append(fa);
         } else card.append(h("p", { class: "cap", text: "Equipe completa (" + maxAtletas + " atletas)." }));
       } else {
-        card.append(h("h3", { text: eq.nome }));
+        card.append(h("h3", { class: "t-eqtit" }, eqTag(eq.id)));
         if (eq.tecnico) card.append(h("p", { class: "cap t-tecro", text: "Técnico: " + eq.tecnico }));
         const at = [...(eq.atletas || [])].sort((x, y) => (x.num ?? 999) - (y.num ?? 999));
         card.append(at.length ? h("div", { class: "t-atletas ro" }, at.map(a => h("div", { class: "t-atleta" }, h("span", { class: "t-camisa", text: a.num ?? "–" }), h("span", { text: a.nome }), eq.capitao === a.id && h("span", { class: "t-capbadge", title: "Capitão", text: "C" })))) : h("p", { class: "cap", text: "Atletas ainda não cadastrados." }));
@@ -379,6 +391,28 @@ export function montarTorneio(ctx) {
     });
     w.append(cardArbitragem());
     return w;
+  }
+  // escudo da equipe: a imagem é reduzida para 160 px (WebP) e guardada no próprio torneio (equipe.escudo)
+  function blocoEscudo(eq) {
+    const salvarEsc = url => salvarTorneio({ equipes: T.equipes.map(x => x.id === eq.id ? { ...x, escudo: url } : x) });
+    const inp = h("input", { type: "file", accept: "image/*", hidden: true, "aria-label": "Imagem do escudo de " + eq.nome, onchange: async e => {
+      const fl = e.target.files && e.target.files[0]; if (!fl) return;
+      try { await salvarEsc(await reduzirEscudo(fl)); toast("Escudo de " + eq.nome + " salvo."); } catch (err) { console.error(err); toast("Não deu para usar essa imagem."); } } });
+    return h("div", { class: "t-escbloco" },
+      eq.escudo ? h("img", { class: "t-esc t-esc-g", src: eq.escudo, alt: "Escudo de " + eq.nome }) : h("span", { class: "t-esc-vazio", "aria-hidden": "true", text: "escudo" }),
+      h("button", { type: "button", class: "ghost t-mini", onclick: () => inp.click() }, eq.escudo ? "Trocar escudo" : "+ Escudo"),
+      eq.escudo && h("button", { type: "button", class: "ghost t-mini", onclick: () => salvarEsc(null) }, "Tirar"), inp);
+  }
+  async function reduzirEscudo(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = url; });
+      const S = 160, c = document.createElement("canvas"); c.width = c.height = S;
+      const k = Math.min(S / img.naturalWidth, S / img.naturalHeight), w = img.naturalWidth * k, hh = img.naturalHeight * k, g = c.getContext("2d");
+      g.imageSmoothingQuality = "high"; g.drawImage(img, (S - w) / 2, (S - hh) / 2, w, hh);
+      const out = c.toDataURL("image/webp", 0.86);
+      return out.startsWith("data:image/webp") ? out : c.toDataURL("image/png");
+    } finally { URL.revokeObjectURL(url); }
   }
   // equipe de arbitragem do torneio (T.arbitros = ["nome", ...]); cada jogo escolhe a dupla na súmula (j.arbitros = {a1, a2})
   const arbitrosDoTorneio = () => [...new Set([...(T.arbitros || []), ...jogos.flatMap(j => j.arbitros ? [j.arbitros.a1, j.arbitros.a2] : [])].map(x => (x || "").trim()).filter(Boolean))].sort((x, y) => x.localeCompare(y, "pt-BR"));
@@ -422,6 +456,12 @@ export function montarTorneio(ctx) {
     w.append(h("p", { class: "cap", text: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") }));
     const js = jogosEtapa(etapaSel);
     if (montagem && montagem.ei === etapaSel && podeEditar()) { w.append(telaMontagem(et)); return w; }
+    if (et.formato === "livre") {
+      w.append(telaLivre(et, js));
+      if (js.length && podeEditar()) w.append(cartaoAgenda(et, js));
+      if (js.some(j => j.status === "encerrado" && !j.wo)) w.append(cartaoClassificacaoEtapa(etapaSel));
+      return w;
+    }
     const grp = C.gruposDe(et), temGrupos = grp.length > 0, temMata = js.some(j => j.fase === "mata" && j.serie == null), series = et.series || [], temSeries = series.length > 0;
     if (!temGrupos && !temMata && !temSeries) { w.append(telaSorteio(et)); return w; }
     const emSeries = et.formato === "series";
@@ -437,7 +477,7 @@ export function montarTorneio(ctx) {
           h("table", { class: "t-tab" },
             h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l", text: "Equipe" }), PTS() && h("th", { text: "Pts" }), h("th", { text: "J" }), h("th", { text: "V" }), !BIR && h("th", { text: "E" }), h("th", { text: "D" }), h("th", { text: "Saldo" }))),
             h("tbody", null, cl.map((r, i) => h("tr", { class: i < q ? "passa" : "" },
-              h("td", { text: (i + 1) + "º" }), h("td", { class: "l", text: eqNome(r.eid) }), PTS() && h("td", { class: "t-pts", text: r.pg }), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }), h("td", { text: (r.saldo > 0 ? "+" : "") + r.saldo })))))));
+              h("td", { text: (i + 1) + "º" }), h("td", { class: "l" }, eqTag(r.eid)), PTS() && h("td", { class: "t-pts", text: r.pg }), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }), h("td", { text: (r.saldo > 0 ? "+" : "") + r.saldo })))))));
       });
       w.append(grade);
       w.append(h("p", { class: "cap", text: (emSeries ? "Em destaque, quem vai para as séries: " + C.SERIES.slice(0, et.classificam || 3).map((s, k) => (k + 1) + "º → " + s).join(", ") + ". " : "Em destaque, quem passa de fase (" + (et.classificam || 2) + (grp.length > 1 ? " por grupo" : "") + "). ") + TXT_CRIT() }));
@@ -483,7 +523,7 @@ export function montarTorneio(ctx) {
           card.append(h("div", { class: "t-card t-grupo" }, h("table", { class: "t-tab" },
             h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l", text: "Equipe" }), PTS() && h("th", { text: "Pts" }), h("th", { text: "J" }), h("th", { text: "V" }), !BIR && h("th", { text: "E" }), h("th", { text: "D" }), h("th", { text: "Saldo" }))),
             h("tbody", null, cl.map((r, i) => h("tr", { class: i < 3 ? "passa" : "" },
-              h("td", { text: (i + 1) + "º" }), h("td", { class: "l", text: eqNome(r.eid) }), PTS() && h("td", { class: "t-pts", text: r.pg }), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }), h("td", { text: (r.saldo > 0 ? "+" : "") + r.saldo })))))));
+              h("td", { text: (i + 1) + "º" }), h("td", { class: "l" }, eqTag(r.eid)), PTS() && h("td", { class: "t-pts", text: r.pg }), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }), h("td", { text: (r.saldo > 0 ? "+" : "") + r.saldo })))))));
           card.append(h("details", { class: "t-card t-jogos", open: true }, h("summary", null, "Jogos da " + C.SERIES[si] + " · " + sj.filter(j => j.status === "encerrado").length + "/" + sj.length),
             sj.sort((a, b) => a.rodada - b.rodada || a.ordem - b.ordem).map(j => cartaoJogo(j))));
         } else card.append(chaveMata(sj));
@@ -495,20 +535,116 @@ export function montarTorneio(ctx) {
         b.update(ref(), { etapas: T.etapas.map((e, i) => i === etapaSel ? { ...e, series: [] } : e) }); await b.commit(); toast("Séries desfeitas.");
       }, "Desfazer") }, "Desfazer séries"));
     }
+    if (js.length && podeEditar()) w.append(cartaoAgenda(et, js));
     if (js.some(j => j.status === "encerrado" && !j.wo)) w.append(cartaoClassificacaoEtapa(etapaSel));
     return w;
+  }
+
+  // data, horário (e local, se a etapa não tiver local único) de cada jogo
+  function cartaoAgenda(et, js) {
+    const lista = js.filter(j => !j.wo).sort((a, b) => (a.data || "9").localeCompare(b.data || "9") || (a.hora || "99").localeCompare(b.hora || "99") || (a.num || 0) - (b.num || 0) || a.rodada - b.rodada || a.ordem - b.ordem);
+    const salvar = (j, k, v) => updateDoc(jogoRef(j.id), { [k]: v }).catch(e => { console.error(e); toast("Não deu para salvar."); });
+    const um = et.localUnico !== false;
+    return h("details", { class: "t-card t-jogos t-agenda" },
+      h("summary", null, "Datas, horários e locais dos jogos"),
+      h("p", { class: "cap", text: um ? "Todos os jogos em " + (et.local || "local a definir") + ". Para cada jogo ter o seu local, desmarque \"Todos os jogos neste local\" em Torneio → Editar." : "Cada jogo tem data, horário e local próprios. Em branco, vale o da etapa (" + [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") + ")." }),
+      lista.map(j => h("div", { class: "t-ag" },
+        h("span", { class: "t-agtit", text: (j.faseNome || "") + ": " + (j.a ? eqNome(j.a) : j.rotA || "A definir") + " x " + (j.b ? eqNome(j.b) : j.rotB || "A definir") }),
+        h("div", { class: "t-aglin" },
+          h("input", { type: "date", value: j.data || "", "aria-label": "Data do jogo", onchange: e => salvar(j, "data", e.target.value) }),
+          h("input", { type: "time", value: j.hora || "", "aria-label": "Horário do jogo", onchange: e => salvar(j, "hora", e.target.value) }),
+          !um && h("input", { value: j.local || "", placeholder: et.local || "Local", maxlength: 40, "aria-label": "Local do jogo", onchange: e => salvar(j, "local", e.target.value.trim()) })))));
+  }
+
+  /* ---------- chave personalizada: jogos montados à mão (Jogo 1, Jogo 2, vencedor/perdedor de outro jogo) ---------- */
+  const tituloLivre = j => "Jogo " + j.num + (j.rotulo ? " · " + j.rotulo : j.papel === "final" ? " · Final" : j.papel === "terceiro" ? " · Disputa de 3º lugar" : "");
+  const faseLivre = (num, rotulo, papel) => rotulo || (papel === "final" ? "Final" : papel === "terceiro" ? C.TERCEIRO : "Jogo " + num);
+  function rotOrig(cod, lj) { const o = C.origLivre(cod); if (!o) return null; const x = lj.find(y => y.id === o.id); return (o.t === "v" ? "Vencedor" : "Perdedor") + " do Jogo " + (x ? x.num : "?"); }
+  function telaLivre(et, js) {
+    const lj = js.filter(j => j.fase === "livre").sort((a, b) => (a.num || 0) - (b.num || 0)), ed = podeEditar(), w = h("div", { class: "t-col" });
+    w.append(h("h3", { class: "t-h", text: "Jogos" }));
+    if (!lj.length) w.append(h("p", { class: "cap", text: ed ? "Crie os jogos em ordem. Em cada jogo escolha as equipes ou \"Vencedor/Perdedor do Jogo N\", e a data e o horário. Marque qual jogo é a final e qual é a disputa de 3º lugar." : "Os jogos desta etapa ainda não foram cadastrados." }));
+    lj.forEach(j => {
+      const v = { ...j, rotA: rotOrig(j.orig && j.orig.a, lj), rotB: rotOrig(j.orig && j.orig.b, lj) };
+      const card = h("div", { class: "t-livre" + (j.papel ? " " + j.papel : "") },
+        h("div", { class: "t-livre-tit" }, h("b", { text: tituloLivre(j) }),
+          ed && h("button", { type: "button", class: "ghost t-mini", "aria-expanded": String(livreEd === j.id), onclick: () => { livreEd = livreEd === j.id ? null : j.id; render(); } }, livreEd === j.id ? "Fechar" : "Editar")),
+        cartaoJogo(v));
+      if (ed && livreEd === j.id) card.append(editorLivre(et, j, lj));
+      w.append(card);
+    });
+    if (ed) w.append(h("div", { class: "t-linha" },
+      h("button", { type: "button", onclick: () => novoJogoLivre(et, lj) }, "+ Jogo"),
+      !lj.length && h("button", { type: "button", class: "ghost", onclick: () => salvarTorneio({ etapas: T.etapas.map((e, i) => i === etapaSel ? { ...e, formato: "mata" } : e) }) }, "Voltar para grupos / mata-mata")));
+    const pod = C.podioLivre(esporte, lj);
+    if (lj.some(j => j.papel)) w.append(cartaoPodio("Pódio", pod));
+    return w;
+  }
+  async function novoJogoLivre(et, lj) {
+    const ult = lj[lj.length - 1], num = (ult ? ult.num || lj.length : 0) + 1, id = C.uid("j");
+    try {
+      await setDoc(jogoRef(id), novoJogo({ etapa: etapaSel, fase: "livre", num, rodada: num, ordem: 0, faseNome: "Jogo " + num, a: null, b: null, orig: { a: null, b: null }, papel: "", rotulo: "",
+        data: (ult && ult.data) || et.data || "", hora: (ult && ult.hora) || et.hora || "", local: "" }));
+      livreEd = id; toast("Jogo " + num + " criado. Escolha as equipes.");
+    } catch (e) { console.error(e); toast("Não deu para criar o jogo."); }
+  }
+  function editorLivre(et, j, lj) {
+    const jogou = j.status !== "agendado";
+    const valor = l => (j.orig && j.orig[l]) || (j[l] ? "e:" + j[l] : "");
+    const sel = (l, rot) => h("label", { class: "t-lbl" }, rot, h("select", { class: "t-lv-" + l, disabled: jogou },
+      h("option", { value: "" }, "A definir"),
+      h("optgroup", { label: "Equipe" }, T.equipes.map(e => h("option", { value: "e:" + e.id, selected: valor(l) === "e:" + e.id }, e.nome))),
+      h("optgroup", { label: "Resultado de outro jogo" }, lj.filter(x => x.id !== j.id).flatMap(x => [["v", "Vencedor"], ["p", "Perdedor"]].map(([t, n]) => h("option", { value: t + ":" + x.id, selected: valor(l) === t + ":" + x.id }, n + " do Jogo " + x.num))))));
+    const um = et.localUnico !== false;
+    const f = h("form", { class: "t-form t-livre-ed", onsubmit: async e => {
+      e.preventDefault();
+      const rotulo = f.querySelector(".t-lv-rot").value.trim().slice(0, 40), papel = f.querySelector(".t-lv-papel").value;
+      const d = { rotulo, papel, faseNome: faseLivre(j.num, rotulo, papel), data: f.querySelector(".t-lv-data").value, hora: f.querySelector(".t-lv-hora").value };
+      if (!um) d.local = f.querySelector(".t-lv-local").value.trim();
+      if (!jogou) {
+        const orig = { a: null, b: null };
+        ["a", "b"].forEach(l => {
+          const v = f.querySelector(".t-lv-" + l).value, o = C.origLivre(v);
+          if (o) { orig[l] = v; const x = jogos.find(y => y.id === o.id), r = x ? res(x) : null, vc = r && r.fim && !r.empate ? r.venc : null; d[l] = vc ? (o.t === "v" ? vc : (vc === x.a ? x.b : x.a)) : null; }
+          else d[l] = v.startsWith("e:") ? v.slice(2) : null;
+        });
+        if (d.a && d.a === d.b) { toast("Escolha equipes diferentes."); return; }
+        if (orig.a && orig.a === orig.b) { toast("Os dois lados não podem ser a mesma vaga."); return; }
+        d.orig = orig;
+      }
+      if (papel && lj.some(x => x.id !== j.id && x.papel === papel)) { toast(papel === "final" ? "Já existe um jogo marcado como final." : "Já existe um jogo marcado como disputa de 3º lugar."); return; }
+      try { await updateDoc(jogoRef(j.id), d); livreEd = null; toast("Jogo " + j.num + " salvo."); } catch (err) { console.error(err); toast("Não deu para salvar o jogo."); }
+    } },
+      jogou && h("p", { class: "cap", text: "Este jogo já começou: dá para mudar data, horário e nome, mas não as equipes." }),
+      h("div", { class: "t-livre-lados" }, sel("a", "Equipe A"), h("span", { class: "t-x", text: "x" }), sel("b", "Equipe B")),
+      h("div", { class: "t-linha" },
+        h("label", { class: "t-lbl" }, "Data", h("input", { class: "t-lv-data", type: "date", value: j.data || "" })),
+        h("label", { class: "t-lbl" }, "Horário", h("input", { class: "t-lv-hora", type: "time", value: j.hora || "" })),
+        !um && h("label", { class: "t-lbl" }, "Local", h("input", { class: "t-lv-local", value: j.local || "", placeholder: et.local || "Local", maxlength: 40 }))),
+      um && h("p", { class: "cap", text: "Local: " + (et.local || "a definir") + " (o mesmo para todos os jogos; muda em Torneio → Editar)." }),
+      h("div", { class: "t-linha" },
+        h("label", { class: "t-lbl" }, "Este jogo é", h("select", { class: "t-lv-papel" },
+          h("option", { value: "", selected: !j.papel }, "Um jogo da etapa"), h("option", { value: "final", selected: j.papel === "final" }, "A final (campeã e vice)"), h("option", { value: "terceiro", selected: j.papel === "terceiro" }, "A disputa de 3º lugar"))),
+        h("label", { class: "t-lbl" }, "Nome (opcional)", h("input", { class: "t-lv-rot", value: j.rotulo || "", maxlength: 40, placeholder: "Ex.: Semifinal" }))),
+      h("div", { class: "t-linha" }, h("button", { type: "submit" }, "Salvar jogo"),
+        !jogou && h("button", { type: "button", class: "danger t-mini", onclick: () => {
+          if (lj.some(x => x.orig && [x.orig.a, x.orig.b].some(c => (C.origLivre(c) || {}).id === j.id))) { toast("Outro jogo depende do resultado deste. Mude aquele jogo primeiro."); return; }
+          perguntar("Apagar o Jogo " + j.num + "?", async () => { await deleteDoc(jogoRef(j.id)); livreEd = null; }, "Apagar jogo"); } }, "Apagar jogo")));
+    return f;
   }
 
   function cartaoPodio(titulo, p) {
     if (!p || !p.length) return null;
     const rot = ["1º lugar", "2º lugar", "3º lugar"];
     return h("div", { class: "t-card t-podio" }, h("div", { class: "t-gtit", text: titulo }),
-      h("ol", { class: "t-podio-l" }, [0, 1, 2].map(k => h("li", { class: "p" + k + (p[k] ? "" : " vazio") }, h("span", { class: "t-medalha m" + k, text: MED[k] }), h("span", { class: "cap", text: rot[k] }), h("b", { text: p[k] ? eqNome(p[k]) : "A definir" })))));
+      h("ol", { class: "t-podio-l" }, [0, 1, 2].map(k => h("li", { class: "p" + k + (p[k] ? "" : " vazio") }, h("span", { class: "t-medalha m" + k, text: MED[k] }), h("span", { class: "cap", text: rot[k] }), h("b", null, p[k] ? eqTag(p[k]) : "A definir")))));
   }
   function podiosEtapa(ei) {
     const js = jogosEtapa(ei), et = T.etapas[ei] || {}, out = [];
     const mj = js.filter(j => j.fase === "mata" && j.serie == null);
     if (mj.length) out.push({ titulo: "Mata-mata", p: C.podioMata(esporte, mj) });
+    const lj = js.filter(j => j.fase === "livre");
+    if (lj.some(j => j.papel)) out.push({ titulo: "Pódio", p: C.podioLivre(esporte, lj) });
     (et.series || []).forEach((s, si) => out.push({ titulo: C.SERIES[si], serie: si, p: C.podioSerie(esporte, s, js.filter(j => j.serie === si), eqNome) }));
     return out;
   }
@@ -519,9 +655,10 @@ export function montarTorneio(ctx) {
     const det = BIR && j.sets && j.sets.length ? j.sets.filter(s => s.a || s.b).map(s => s.a + "-" + s.b).join(" · ") : "";
     const cls = n => (fim && r.venc === n ? "venc" : fim && r.venc && r.venc !== n ? "perd" : "");
     return h("button", { type: "button", class: "t-jogo" + (compacto ? " compacto" : "") + (j.status === "andamento" ? " vivo" : "") + (j.wo ? " bye" : "") + (j.previsto ? " previsto" : ""), disabled: j.previsto || !j.a || !j.b, onclick: () => abrirSumula(j.id) },
-      h("span", { class: "t-eq " + cls(j.a), text: j.a ? eqNome(j.a) : (j.rotA || "A definir") }),
+      h("span", { class: "t-eq " + cls(j.a) }, j.a ? eqTag(j.a) : (j.rotA || "A definir")),
       h("span", { class: "t-pl" }, h("b", { text: j.wo ? "bye" : placar }), det && h("small", { text: det }), j.status === "andamento" && h("small", { class: "vivo-txt", text: "ao vivo" }), r.empate && h("small", { text: "empate" })),
-      h("span", { class: "t-eq dir " + cls(j.b), text: j.wo ? "—" : j.b ? eqNome(j.b) : (j.rotB || "A definir") }));
+      h("span", { class: "t-eq dir " + cls(j.b) }, j.wo ? "—" : j.b ? eqTag(j.b) : (j.rotB || "A definir")),
+      !j.previsto && T && quandoCurto(j) && h("small", { class: "t-quando", text: quandoCurto(j) }));
   }
 
   function chaveMata(todos) {
@@ -533,7 +670,7 @@ export function montarTorneio(ctx) {
       box.append(h("div", { class: "t-rod" }, h("div", { class: "t-rodtit", text: js[0].faseNome }), h("div", { class: "t-rodjogos" }, js.map(j => h("div", { class: "t-slot" }, cartaoJogo(j, true))))));
     });
     const campea = C.podioMata(esporte, todos)[0];
-    if (campea) box.append(h("div", { class: "t-rod t-camp" }, h("div", { class: "t-rodtit", text: "Campeã" }), h("div", { class: "t-rodjogos" }, h("div", { class: "t-slot" }, h("div", { class: "t-trofeu" }, "🏆", h("b", { text: eqNome(campea) }))))));
+    if (campea) box.append(h("div", { class: "t-rod t-camp" }, h("div", { class: "t-rodtit", text: "Campeã" }), h("div", { class: "t-rodjogos" }, h("div", { class: "t-slot" }, h("div", { class: "t-trofeu" }, "🏆", escudoDe(campea) && h("img", { class: "t-esc t-esc-g", src: escudoDe(campea), alt: "" }), h("b", { text: eqNome(campea) }))))));
     return h("div", { class: "t-col" }, h("div", { class: "t-chave-wrap" }, box),
       terc && h("div", { class: "t-terc" }, h("div", { class: "t-rodtit", text: terc.faseNome }), cartaoJogo(terc, true)));
   }
@@ -575,7 +712,9 @@ export function montarTorneio(ctx) {
     if (rs.nGrupos === 0) {
       w.append(h("div", { class: "t-card" }, h("p", { class: "cap", text: "Mata-mata direto: no automático, a ordem de cadastro das equipes vira a ordem das cabeças de chave (1ª x última...) e quem sobra ganha bye. À mão, você escolhe cada confronto." }),
         h("div", { class: "t-linha" }, h("button", { type: "button", onclick: () => gerarMataDireto(etapaSel) }, "Gerar chave automática"), h("button", { type: "button", class: "ghost", onclick: () => abrirMontagemMata(et, etapaSel, true) }, "Montar chave à mão"),
-          SERIES_OK && h("button", { type: "button", class: "ghost", onclick: () => abrirMontagemSeries(et, etapaSel) }, "Montar séries Ouro, Prata e Bronze à mão"))));
+          SERIES_OK && h("button", { type: "button", class: "ghost", onclick: () => abrirMontagemSeries(et, etapaSel) }, "Montar séries Ouro, Prata e Bronze à mão")),
+        h("p", { class: "cap", text: "Ou monte jogo por jogo, como numa tabela de fase final: Jogo 1, Jogo 2, \"Vencedor do Jogo 1 x Perdedor do Jogo 2\"... com data e horário de cada jogo." }),
+        h("button", { type: "button", class: "ghost", onclick: () => salvarTorneio({ etapas: T.etapas.map((e, i) => i === etapaSel ? { ...e, formato: "livre", grupos: [], series: [] } : e) }) }, "Montar jogos à mão (Jogo 1, Jogo 2, vencedor/perdedor)")));
       return w;
     }
     if (rs.modo === "manual") {
@@ -816,8 +955,12 @@ export function montarTorneio(ctx) {
 
   // após encerrar/alterar um jogo do mata-mata, leva o vencedor para o próximo jogo e o perdedor da semifinal para o 3º lugar
   function propagar(j) {
-    if (j.fase !== "mata") return;
     const r = res(j), venc = r.fim && !r.empate ? r.venc : null, perd = venc ? (venc === j.a ? j.b : j.a) : null;
+    // chave personalizada: "Vencedor/Perdedor do Jogo N" (só mexe em jogo que ainda não começou)
+    jogos.forEach(x => { if (!x.orig || x.status !== "agendado") return; ["a", "b"].forEach(l => {
+      const o = C.origLivre(x.orig[l]); if (!o || o.id !== j.id) return;
+      const quem = (o.t === "v" ? venc : perd) || null; if ((x[l] || null) !== quem) updateDoc(jogoRef(x.id), { [l]: quem }).catch(console.error); }); });
+    if (j.fase !== "mata") return;
     jogos.forEach(x => {
       [["de", venc], ["perd", perd]].forEach(([campo, quem]) => {
         if (!(x[campo] || []).includes(j.id)) return;
@@ -853,11 +996,11 @@ export function montarTorneio(ctx) {
     const painel = h("div", { class: "t-sumula", role: "dialog", "aria-label": "Súmula do jogo" });
     painel.append(h("div", { class: "t-sum-topo" },
       h("button", { type: "button", class: "ghost t-mini", onclick: fechar }, "← Voltar"),
-      h("span", { class: "cap", text: j.faseNome + " · " + (et.nome || "") }),
+      h("span", { class: "cap", text: [j.faseNome, et.nome, quandoCompleto(j)].filter(Boolean).join(" · ") }),
       h("span", { class: "t-pill" + (fim ? " ok" : j.status === "andamento" ? " and" : ""), text: fim ? "Encerrado" : j.status === "andamento" ? "Em andamento" : "Agendado" })));
     // placar no topo: no biribol com rodízio, cada equipe aparece do lado em que está na piscina
     const ladoTopo = BIR && ROD ? R.ordemLados(j.rodizio, Math.max(0, (j.sets || []).length - 1)) : ["a", "b"];
-    const peTopo = l => h("div", { class: "t-pe" + (fim && r.venc === j[l] ? " venc" : "") }, h("span", { text: eqNome(j[l]) }), h("b", { text: BIR ? (l === "a" ? r.sa : r.sb) : (l === "a" ? r.pa : r.pb) }));
+    const peTopo = l => h("div", { class: "t-pe" + (fim && r.venc === j[l] ? " venc" : "") }, escudoDe(j[l]) && h("img", { class: "t-esc t-esc-g", src: escudoDe(j[l]), alt: "" }), h("span", { text: eqNome(j[l]) }), h("b", { text: BIR ? (l === "a" ? r.sa : r.sb) : (l === "a" ? r.pa : r.pb) }));
     painel.append(h("div", { class: "t-placar" }, peTopo(ladoTopo[0]), h("div", { class: "t-x", text: "x" }), peTopo(ladoTopo[1])));
     if (fim) painel.append(h("p", { class: "t-res", text: r.empate ? "Empate" : "Vitória de " + eqNome(r.venc) + (j.periodos && j.periodos.some(p => p.n === "BO") ? " na bola de ouro" : j.periodos && j.periodos.some(p => /^P/.test(p.n)) ? " na prorrogação" : "") }));
     if (j.a && j.b && !j.wo) { const ba = blocoArbitragem(j, ed); if (ba) painel.append(ba); }
@@ -881,7 +1024,7 @@ export function montarTorneio(ctx) {
       h("button", { type: "button", class: "ghost t-mini", onclick: () => gerarSumula(j, "pdf") }, "PDF"), h("button", { type: "button", class: "ghost t-mini", onclick: () => gerarSumula(j, "xlsx") }, "Excel")));
     BIR ? sumulaBiribol(painel, j, ed, fim) : sumulaBasquete(painel, j, ed, fim);
     // atletas
-    painel.append(h("div", { class: "chips t-lados" }, ["a", "b"].map(l => h("button", { type: "button", "aria-pressed": String(ladoSel === l), onclick: () => { ladoSel = l; render(); } }, eqNome(j[l])))));
+    painel.append(h("div", { class: "chips t-lados" }, ["a", "b"].map(l => h("button", { type: "button", "aria-pressed": String(ladoSel === l), onclick: () => { ladoSel = l; render(); } }, eqTag(j[l])))));
     const eq = eqDe(j[ladoSel]);
     const ats = [...((eq && eq.atletas) || [])].sort((x, y) => (x.num ?? 999) - (y.num ?? 999));
     if (eq && (eq.tecnico || eq.capitao)) { const cp = (eq.atletas || []).find(a => a.id === eq.capitao);

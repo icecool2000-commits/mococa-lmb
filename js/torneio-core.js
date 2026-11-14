@@ -202,6 +202,7 @@ export const gruposParaSalvar = gs => gs.map(g => ({ equipes: g }));
 export const SERIES = ["Série Ouro", "Série Prata", "Série Bronze"];
 export const MEDALHAS = ["Ouro", "Prata", "Bronze"];
 export const TERCEIRO = "Disputa de 3º lugar";
+const C_TERC = TERCEIRO;
 export const ORDEM_FASES = ["Classificação", "Série Ouro", "Série Prata", "Série Bronze", "16 avos de final", "Oitavas de final", "Quartas de final", "Semifinal", TERCEIRO, "Final"];
 export const faseEstat = j => j.fase === "grupo" ? "Classificação" : j.serie != null ? SERIES[j.serie] : j.faseNome;
 
@@ -262,6 +263,17 @@ export function montarSeries(porGrupo /* [[rows classificados]] */, nSeries, tod
   return out;
 }
 
+/* ---------- chave personalizada: jogos montados à mão ----------
+   j.fase = "livre", j.num (Jogo 1, 2...), j.orig = { a, b } com "v:<id do jogo>" (vencedor) ou "p:<id>" (perdedor) ou null (equipe fixa em j.a/j.b),
+   j.papel = "final" (campeã e vice) | "terceiro" (3º e 4º) | "" */
+export const origLivre = s => typeof s === "string" && /^[vp]:./.test(s) ? { t: s[0], id: s.slice(2) } : null;
+export function podioLivre(esporte, js) {
+  const p = [null, null, null], fin = js.find(j => j.papel === "final"), t = js.find(j => j.papel === "terceiro");
+  if (fin && fin.status === "encerrado") { const r = resultado(esporte, fin); if (r.venc) { p[0] = r.venc; p[1] = r.venc === fin.a ? fin.b : fin.a; } }
+  if (t && t.status === "encerrado") { const r = resultado(esporte, t); if (r.venc) p[2] = r.venc; }
+  return p;
+}
+
 /* ---------- classificação final da etapa e classificação geral ---------- */
 // faixas de colocação de uma chave de mata-mata: campeã, vice, 3º, 4º, depois os eliminados de cada rodada
 function faixasChave(esporte, js, cmp) {
@@ -296,6 +308,14 @@ export function colocacaoEtapa(esporte, et, js, equipeIds, nomeDe = id => id) {
   const add = (eqs, rot, extra = {}) => { const f = eqs.filter(e => e && !usados.has(e)); f.forEach(e => usados.add(e)); if (f.length) faixas.push({ eqs: f, rot, ...extra }); };
   const mj = js.filter(j => j.fase === "mata" && j.serie == null);
   if (mj.length) faixasChave(esporte, mj, cmp).forEach(f => add(f.eqs, f.rot));
+  // chave personalizada: final (campeã/vice) e disputa de 3º lugar; o resto pela campanha
+  const lj = js.filter(j => j.fase === "livre");
+  if (lj.length) {
+    const venc = j => { const r = resultado(esporte, j); return j.status === "encerrado" && r.venc ? r.venc : null; };
+    const fin = lj.find(j => j.papel === "final"), t = lj.find(j => j.papel === "terceiro");
+    if (fin) { const v = venc(fin); if (v) { add([v], "Campeã"); add([v === fin.a ? fin.b : fin.a], "Vice"); } else add([fin.a, fin.b].filter(Boolean).sort(cmp), "Final"); }
+    if (t) { const v = venc(t); if (v) { add([v], "3º lugar"); add([v === t.a ? t.b : t.a], "4º lugar"); } else add([t.a, t.b].filter(Boolean).sort(cmp), C_TERC); }
+  }
   (et.series || []).forEach((s, si) => {
     const sj = js.filter(j => j.serie === si);
     if (s.tipo === "todos") classificacao(esporte, s.equipes, sj, nomeDe).forEach((r, k) => add([r.eid], (k + 1) + "º", { serie: si, posSerie: k + 1 }));

@@ -59,6 +59,7 @@ export function montarDados(T, jogos, esporte) {
     jogos.filter(j => j.etapa === ei && j.fase === "grupo").sort((a, b) => a.grupo - b.grupo || a.rodada - b.rodada || a.ordem - b.ordem).forEach(j => numero[j.id] = n++);
     jogos.filter(j => j.etapa === ei && j.fase === "mata" && j.serie == null).sort((a, b) => a.rodada - b.rodada || a.ordem - b.ordem).forEach(j => { if (!j.wo) numero[j.id] = n++; });
     jogos.filter(j => j.etapa === ei && j.serie != null).sort((a, b) => a.serie - b.serie || a.rodada - b.rodada || a.ordem - b.ordem).forEach(j => { if (!j.wo) numero[j.id] = n++; });
+    jogos.filter(j => j.etapa === ei && j.fase === "livre").forEach(j => numero[j.id] = j.num || n++);
   });
   // estrutura de cada etapa
   const etapas = T.etapas.map((et, ei) => {
@@ -101,6 +102,15 @@ export function montarDados(T, jogos, esporte) {
     const chaves = [], seriesRR = [], podios = [];
     const mata = js.filter(j => j.fase === "mata" && j.serie == null), series = et.series || [];
     if (mata.length) chaves.push(chaveReal(mata, "Mata-mata"));
+    const livre = js.filter(j => j.fase === "livre").sort((a, b) => (a.num || 0) - (b.num || 0));
+    if (livre.length) {
+      const rotL = cod => { const o = C.origLivre(cod); return o ? (o.t === "v" ? "Vencedor do jogo " : "Perdedor do jogo ") + (numero[o.id] || "") : ""; };
+      const quando = j => [fmtData(j.data || et.data).slice(0, 5), j.hora || et.hora, et.localUnico === false && j.local ? j.local : ""].filter(Boolean).join(" ");
+      const item = j => { const r2 = res(j), fimJ = j.status === "encerrado";
+        return { id: j.id, num: numero[j.id], fase: j.faseNome + (quando(j) ? " · " + quando(j) : ""), a: j.a ? nome(j.a) : rotL(j.orig && j.orig.a), b: j.b ? nome(j.b) : rotL(j.orig && j.orig.b), bye: false,
+          pa: fimJ ? r2.pa : null, pb: fimJ ? r2.pb : null, sa: BIR && fimJ ? r2.sa : null, sb: BIR && fimJ ? r2.sb : null, venc: fimJ ? nome(r2.venc) : "", sets: BIR && fimJ ? (j.sets || []) : null }; };
+      chaves.push({ titulo: "Jogos", livre: true, rodadas: [livre.map(item)], terceiro: null, podio: livre.some(j => j.papel) ? C.podioLivre(esporte, livre).map(nome) : [], previsto: false });
+    }
     series.forEach((sr, si) => {
       const sj = js.filter(j => j.serie === si).sort((a, b) => a.rodada - b.rodada || a.ordem - b.ordem);
       if (sr.tipo === "todos") seriesRR.push(rrSerie(si, sr.equipes, sj, false)); else chaves.push({ ...chaveReal(sj, C.SERIES[si]), serie: si });
@@ -124,7 +134,7 @@ export function montarDados(T, jogos, esporte) {
       chaves.push(chavePrevista(qual, "Mata-mata", ""));
     }
     chaves.sort((a, b) => (a.serie ?? -1) - (b.serie ?? -1));
-    chaves.forEach(c => podios.push({ titulo: c.titulo, serie: c.serie, p: c.podio }));
+    chaves.forEach(c => { if (!c.livre || c.podio.length) podios.push({ titulo: c.livre ? "Pódio" : c.titulo, serie: c.serie, p: c.podio }); });
     seriesRR.forEach(sr => podios.push({ titulo: sr.titulo, serie: sr.serie, p: sr.previsto ? [] : C.podioSerie(esporte, { tipo: "todos", equipes: sr.equipes }, sr.jogos, nome).map(nome) }));
     podios.sort((a, b) => (a.serie ?? -1) - (b.serie ?? -1));
     const campea = (podios[0] && podios[0].p[0]) || "";
@@ -446,7 +456,7 @@ export async function tabelaPDF(T, jogos, esporte, marca) {
       y = secao(doc, y, "Classificação final da etapa" + (ft.completa ? "" : " (preencha à mão)"), logo);
       y = tabela(doc, y, { head: [ft.head], body: ft.body, styles: { fontSize: 8.4, minCellHeight: 7, halign: "center", lineColor: "#cfd6de", lineWidth: 0.15 }, columnStyles: { 1: { halign: "left", fontStyle: "bold", cellWidth: 60 }, 2: { halign: "left", cellWidth: 60 } } }, logo);
     }
-    et.chaves.forEach(ch => chavePDF(doc, et, ch, logo, true));
+    et.chaves.filter(ch => !ch.livre).forEach(ch => chavePDF(doc, et, ch, logo, true));
   });
   rodapes(doc);
   doc.save(arquivo(T, "tabela-de-jogos.pdf"));
@@ -521,7 +531,7 @@ export async function relatorioPDF(T, jogos, esporte, marca) {
         y = tabela(doc, y, { head: [ft.head], body: ft.body, styles: { fontSize: 8.2, halign: "center", lineColor: "#cfd6de", lineWidth: 0.15 }, columnStyles: { 1: { halign: "left", fontStyle: "bold" }, 2: { halign: "left" } },
           didParseCell: d => { if (d.section === "body" && d.row.index < 3 && d.column.index === 0) { d.cell.styles.fillColor = COR_MED[d.row.index]; d.cell.styles.textColor = "#fff"; } } }, logo); }
     }
-    et.chaves.forEach(ch => chavePDF(doc, et, ch, logo, true));
+    et.chaves.filter(ch => !ch.livre).forEach(ch => chavePDF(doc, et, ch, logo, true));
   });
   // atletas por equipe
   doc.addPage("a4", "portrait"); y = cabecalho(doc, logo, T.nome, "Atletas");
@@ -622,7 +632,7 @@ export async function tabelaXLSX(T, jogos, esporte, marca) {
     { const ft = finalTabela(D, et);
       tituloSecao(ws, "Classificação final da etapa" + (ft.completa ? "" : " (preencha à mão)"), E);
       tabelaXL(ws, ["#", "Equipe", "", "", "Chegou até", "", "", "V", "D", "Saldo"], ft.body.map(r => [r[0], r[1], "", "", r[2], "", "", r[3], r[4], r[5]]), E, { esq: [1, 4], negrito: [1], altura: 20, mesclas: [[1, 3], [4, 6]] }); }
-    et.chaves.forEach(ch => chaveXL(wb, et, ch, D, marca, logo, E, T));
+    et.chaves.filter(ch => !ch.livre).forEach(ch => chaveXL(wb, et, ch, D, marca, logo, E, T));
   });
   await salvarXL(wb, arquivo(T, "tabela-de-jogos.xlsx"));
 }
@@ -719,7 +729,7 @@ export async function relatorioXLSX(T, jogos, esporte, marca) {
     if (et.final && et.final.completa) { const ft = finalTabela(D, et);
       tituloSecao(ws, "Classificação final da etapa", E);
       tabelaXL(ws, ["#", "Equipe", "", "", "Chegou até", "", "", "V", "D", "Saldo"], ft.body.map(r => [r[0], r[1], "", "", r[2], "", "", r[3], r[4], r[5]]), E, { esq: [1, 4], negrito: [1], destaque: i => i < 3, mesclas: [[1, 3], [4, 6]] }); }
-    et.chaves.forEach(ch => chaveXL(wb, et, ch, D, marca, logo, E, T));
+    et.chaves.filter(ch => !ch.livre).forEach(ch => chaveXL(wb, et, ch, D, marca, logo, E, T));
   });
   // Atletas
   ws = folha(wb, "Atletas", marca, logo, T.nome, "Estatísticas individuais", [24, 6, 26, 8, 9, 9, 9, 9]);
@@ -779,12 +789,14 @@ function dadosSumula(T, j, esporte) {
   const A = j.arbitros || {}, arbitros = [A.a1 && "1º árbitro: " + A.a1, A.a2 && "2º árbitro: " + A.a2].filter(Boolean).join("   ·   ");
   // assinaturas: dupla de arbitragem, mesário, capitães e técnicos
   const assinaturas = ["1º árbitro" + (A.a1 ? " – " + A.a1 : ""), "2º árbitro" + (A.a2 ? " – " + A.a2 : ""), "Mesário / anotador", ...lados.map(l => "Capitão – " + l.nome + (l.capitao ? " (" + l.capitao + ")" : "")), ...lados.filter(l => l.tecnico).map(l => "Técnico – " + l.nome + " (" + l.tecnico + ")")];
-  return { BIR, et, lados, parciais, placar, sancoes, incompleta, temCart, mesa, resultado, arbitros, assinaturas, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [et.local, fmtData(et.data), et.hora].filter(Boolean).join(" · ") };
+  return { BIR, et, lados, parciais, placar, sancoes, incompleta, temCart, mesa, resultado, arbitros, assinaturas, destaque: destaque && destaque.p ? destaque : null, info: [T.nome, et.nome, j.faseNome].filter(Boolean).join(" · "), quando: [(et.localUnico === false && j.local) || et.local || j.local, fmtData(j.data || et.data), j.hora || et.hora].filter(Boolean).join(" · "),
+    escudos: ["a", "b"].map(l => eq(j[l]).escudo || null) };
 }
 const nomeSumula = (T, j, D, ext) => arquivo(T, "sumula-" + (D.lados[0].nome + "-x-" + D.lados[1].nome).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase() + "." + ext);
 
 export async function sumulaPDF(T, j, esporte, marca) {
   const jsPDF = await libPDF(), logo = await logoDataUrl(marca.logo, marca.fundoLogo), D = dadosSumula(T, j, esporte);
+  const esc = await Promise.all(D.escudos.map(u => u ? logoDataUrl(u, "#ffffff") : null));
   const doc = pdfBase(jsPDF, marca, { T }, "Súmula"), m = marca, W = doc.internal.pageSize.getWidth();
   let y = cabecalho(doc, logo, "Súmula da partida", D.info);
   doc.setFontSize(9.5); doc.setTextColor("#555"); doc.text(D.quando, 10, y - 3); doc.setTextColor("#1a1a1a");
@@ -792,8 +804,11 @@ export async function sumulaPDF(T, j, esporte, marca) {
   // placar
   doc.setFillColor("#f3f6fa"); doc.setDrawColor("#cfd6de"); doc.roundedRect(10, y, W - 20, 30, 2, 2, "FD");
   doc.setFont("helvetica", "bold"); doc.setFontSize(13);
-  [[D.lados[0], 10 + (W - 20) * 0.25], [D.lados[1], 10 + (W - 20) * 0.75]].forEach(([l, cx]) => {
-    doc.setTextColor(l.venceu ? m.escura : "#444"); doc.text(doc.splitTextToSize(l.nome, (W - 20) * 0.4)[0], cx, y + 11, { align: "center" });
+  [[D.lados[0], 10 + (W - 20) * 0.25, esc[0], 12, 8], [D.lados[1], 10 + (W - 20) * 0.75, esc[1], W - 12 - 20, -8]].forEach(([l, cx0, e, ex, dx], i) => {
+    // escudo da equipe na ponta do quadro do placar; o nome anda um pouco para dentro
+    if (e) doc.addImage(e.url, "PNG", ex, y + 5, 20, 20, "esc" + i);
+    const cx = e ? cx0 + dx : cx0;
+    doc.setTextColor(l.venceu ? m.escura : "#444"); doc.text(doc.splitTextToSize(l.nome, (W - 20) * (e ? 0.3 : 0.4))[0], cx, y + 11, { align: "center" });
     if (l.venceu) { doc.setFontSize(8); doc.setTextColor(m.cor); doc.text("VENCEDORA", cx, y + 17, { align: "center" }); doc.setFontSize(13); }
   });
   doc.setFontSize(24); doc.setTextColor(m.escura); doc.text(D.placar, W / 2, y + 14, { align: "center" });

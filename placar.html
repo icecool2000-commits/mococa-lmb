@@ -19,6 +19,7 @@ body.baixo{display:flex;align-items:flex-end;min-height:calc(100vh - 32px)}
 .lin{display:flex;align-items:center;height:42px;color:#fff;border-bottom:1px solid rgba(255,255,255,.12)}
 .lin:last-child{border-bottom:0}
 .nome{font-weight:800;font-size:21px;text-transform:uppercase;letter-spacing:.02em;padding:0 16px;min-width:260px;max-width:440px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.esc{width:34px;height:34px;object-fit:contain;margin-left:10px;flex:none;display:none}.esc.on{display:block}.esc.on+.nome{padding-left:10px}
 .lin.venc .nome::after{content:" ✓";color:var(--destaque)}
 .sets{width:46px;height:100%;display:flex;align-items:center;justify-content:center;font-family:Anton,Impact,sans-serif;font-size:28px;background:rgba(255,255,255,.1)}
 .pts{width:64px;height:100%;display:flex;align-items:center;justify-content:center;font-family:Anton,Impact,sans-serif;font-size:30px;background:var(--destaque);color:var(--escura)}
@@ -56,8 +57,8 @@ body.mesa .bx{display:flex}
 </head>
 <body>
 <div id="bug"><div class="corpo"><div class="logo"><img id="logo" alt=""></div><div class="linhas">
-  <div class="lin" id="la"><span class="nome" id="na"></span><span class="bx" id="xa"></span><span class="sets" id="sa"></span><span class="pts" id="pa"></span></div>
-  <div class="lin" id="lb"><span class="nome" id="nb"></span><span class="bx" id="xb"></span><span class="sets" id="sb"></span><span class="pts" id="pb"></span></div>
+  <div class="lin" id="la"><img class="esc" id="ea" alt=""><span class="nome" id="na"></span><span class="bx" id="xa"></span><span class="sets" id="sa"></span><span class="pts" id="pa"></span></div>
+  <div class="lin" id="lb"><img class="esc" id="eb" alt=""><span class="nome" id="nb"></span><span class="bx" id="xb"></span><span class="sets" id="sb"></span><span class="pts" id="pb"></span></div>
 </div></div><div class="tag" id="tag"></div></div>
 <div id="rz"></div>
 <div id="faixa"><div class="logo"><img id="logo2" alt=""></div><div class="txt"><small id="f1"></small><b id="f2"></b></div></div>
@@ -133,6 +134,8 @@ function pintar() {
   const esp = E.esporte || "biribol"; document.body.classList.toggle("basquete", esp !== "biribol");
   const p = av.placarVivo(esp, J) || { grande: [0, 0], atual: [0, 0], rotAtual: "", fim: false };
   $("na").textContent = E.nomeA || "Equipe A"; $("nb").textContent = E.nomeB || "Equipe B";
+  // escudos das equipes (vêm do torneio quando a transmissão começa)
+  [["ea", E.escudoA], ["eb", E.escudoB]].forEach(([id, src]) => { const im = $(id); if (src) { if (im.getAttribute("src") !== src) im.src = src; im.classList.add("on"); } else { im.removeAttribute("src"); im.classList.remove("on"); } });
   $("sa").textContent = p.grande[0]; $("sb").textContent = p.grande[1];
   $("pa").textContent = esp === "biribol" ? (p.fim ? p.grande[0] : p.atual[0]) : p.grande[0];
   $("pb").textContent = esp === "biribol" ? (p.fim ? p.grande[1] : p.atual[1]) : p.grande[1];

@@ -289,9 +289,9 @@ export function montarAoVivo(ctx) {
     return h("div", { class: "t-card av-placar" },
       h("div", { class: "t-linha t-entre" }, h("span", { class: "t-sub", text: E.rotulo || "Placar" }), h("span", { class: "av-st" + (p.fim ? "" : " on"), text: p.fim ? "Encerrado" : jogo.status === "andamento" ? "Em andamento" : "Aguardando" })),
       h("div", { class: "av-pl" },
-        h("b", { class: "av-eq" + cls(0), text: nA }),
+        h("b", { class: "av-eq" + cls(0) }, E.escudoA && h("img", { class: "av-esc", src: E.escudoA, alt: "" }), h("span", { text: nA })),
         h("div", { class: "av-num" }, h("span", { text: p.grande[0] }), h("small", { text: p.rotGrande }), h("span", { text: p.grande[1] })),
-        h("b", { class: "av-eq dir" + cls(1), text: nB })),
+        h("b", { class: "av-eq dir" + cls(1) }, E.escudoB && h("img", { class: "av-esc", src: E.escudoB, alt: "" }), h("span", { text: nB }))),
       !p.fim && !p.wo && h("div", { class: "av-atual" }, h("span", { text: p.atual[0] }), h("small", { text: p.rotAtual }), h("span", { text: p.atual[1] })),
       jogo.mrel && !p.fim && h("p", { class: "t-centro av-relm" }, "⏱ ", h("b", { class: "av-rel", "data-r": "j", text: BQ.fmtRel((BQ.relogioAgora({ rel: jogo.mrel }) || { rest: 0 }).rest) })),
       p.parciais.length > 0 && h("p", { class: "cap t-centro", text: (esporte === "biribol" ? "Sets: " : "") + p.parciais.join(" · ") }),
@@ -408,12 +408,14 @@ export function montarAoVivo(ctx) {
     if (link && !vid) { toast("Não reconheci esse link do YouTube."); return; }
     if (!canalId() && !vid) toast("Cadastre o canal do YouTube (abaixo) ou cole o link da live para o vídeo aparecer.");
     const j = js.find(x => x.id === rasc.jogoId), nome = id => (T && T.equipes.find(e => e.id === id) || {}).nome || "";
+    const escudo = id => (T && T.equipes.find(e => e.id === id) || {}).escudo || null;
     const vivoAntes = E && E.aoVivo;
     const d = {
       aoVivo: true, titulo: rasc.titulo.trim() || (T ? T.nome : MANUAL ? (ctx.rotuloManual || "Rachão") + " " + dataHora(Date.now()).slice(0, 5) : "Transmissão ao vivo"), videoId: vid || null,
       inicio: vivoAntes && E.inicio ? E.inicio : Date.now(), igAtivo: !!rasc.ig, igUsuario: (rasc.igUser || "").replace(/^@/, "").trim(),
       col, torneioId: j && T ? T.id : null, torneioNome: j && T ? T.nome : null, jogoId: j ? j.id : null,
       nomeA: j ? nome(j.a) : null, nomeB: j ? nome(j.b) : null, rotulo: j ? rotuloJogo(T, j) : null, esporte,
+      escudoA: j ? escudo(j.a) : null, escudoB: j ? escudo(j.b) : null,
       marca: ctx.marca || null, autor: ctx.autor ? ctx.autor() || null : null, atualizado: Date.now()
     };
     if (!vivoAntes) d.videoIdAuto = null;
@@ -421,7 +423,7 @@ export function montarAoVivo(ctx) {
     if (MANUAL) {
       const nA = (rasc.nomeA || "").trim() || "Time A", nB = (rasc.nomeB || "").trim() || "Time B", rot = rasc.rotulo || ctx.rotuloManual || "Rachão";
       const ant = vivoAntes && E.manual ? E.manual : null;
-      Object.assign(d, { nomeA: nA, nomeB: nB, rotulo: rot, torneioId: null, jogoId: null,
+      Object.assign(d, { nomeA: nA, nomeB: nB, rotulo: rot, torneioId: null, jogoId: null, escudoA: null, escudoB: null,
         manual: esporte === "biribol" ? { nomeA: nA, nomeB: nB, sets: ant && ant.sets ? ant.sets : [{ a: 0, b: 0 }] }
           : { nomeA: nA, nomeB: nB, periodos: ant && ant.periodos ? ant.periodos : Q4(), q: ant && ant.q || "1Q", rel: ant && ant.rel || { rest: 600, rod: false, em: Date.now() }, fim: false } });
       if (!rasc.titulo.trim()) d.titulo = rot + (rot === "Amistoso" ? " · " + nA + " x " + nB : " " + dataHora(Date.now()).slice(0, 5));
@@ -453,7 +455,7 @@ export function montarAoVivo(ctx) {
       E && E.aoVivo && h("p", { class: "cap", text: "Há uma transmissão marcada como no ar: a simulação toma o lugar dela (o jogo em destaque sai do ar até você começar de novo)." }),
       h("p", { class: "cap", text: "Cria uma partida de simulação (Equipe Azul x Equipe Vermelha, já com a formação confirmada) e coloca no ar aqui e no placar da live (Prism/Streamlabs/OBS). Nada entra no torneio nem no histórico." }),
       h("button", { type: "button", onclick: async () => {
-        try { await setDoc(refEstado, { aoVivo: true, titulo: "Teste de transmissão", inicio: Date.now(), videoId: null, videoIdAuto: null, igAtivo: false, col, torneioId: null, jogoId: null, torneioNome: null,
+        try { await setDoc(refEstado, { aoVivo: true, titulo: "Teste de transmissão", inicio: Date.now(), videoId: null, videoIdAuto: null, igAtivo: false, col, torneioId: null, jogoId: null, torneioNome: null, escudoA: null, escudoB: null,
           nomeA: "Equipe Azul", nomeB: "Equipe Vermelha", rotulo: "Simulação", esporte, marca: ctx.marca || null, manual: null, sim: novaSim(), simAuto: null, atualizado: Date.now() }, { merge: true });
           rasc = null; painelSujo = true; toast("Simulação no ar. Marque pontos ou ligue o automático."); }
         catch (e) { console.error(e); toast("Não deu para começar. Verifique se você está logado como editor."); }
@@ -467,7 +469,7 @@ export function montarAoVivo(ctx) {
       E && E.aoVivo && h("p", { class: "cap", text: "Há uma transmissão marcada como no ar: a simulação toma o lugar dela até você começar outra." }),
       h("p", { class: "cap", text: "Simula um jogo completo (Equipe Laranja x Equipe Azul) em tempo acelerado: cada quarto dura cerca de 1 minuto, com cestas de 2 e de 3, faltas, lances livres, BÔNUS, tempos, substituições e posse alternada. Aparece aqui e no placar da live (Prism/Streamlabs/OBS). Nada entra no torneio." }),
       h("button", { type: "button", onclick: async () => {
-        try { await setDoc(refEstado, { aoVivo: true, titulo: "Teste de transmissão", inicio: Date.now(), videoId: null, videoIdAuto: null, igAtivo: false, col, torneioId: null, jogoId: null, torneioNome: null,
+        try { await setDoc(refEstado, { aoVivo: true, titulo: "Teste de transmissão", inicio: Date.now(), videoId: null, videoIdAuto: null, igAtivo: false, col, torneioId: null, jogoId: null, torneioNome: null, escudoA: null, escudoB: null,
           nomeA: "Equipe Laranja", nomeB: "Equipe Azul", rotulo: "Simulação", esporte, marca: ctx.marca || null, manual: null, sim: null, simAuto: null,
           simBq: { inicio: Date.now(), seed: Math.floor(Math.random() * 1e9), parado: null }, atualizado: Date.now() }, { merge: true });
           rasc = null; painelSujo = true; toast("Simulação no ar: o jogo anda sozinho (1 quarto ≈ 1 minuto)."); }
