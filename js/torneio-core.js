@@ -274,6 +274,24 @@ export function podioLivre(esporte, js) {
   return p;
 }
 
+// colunas da chave desenhada: cada jogo fica uma coluna depois dos jogos de onde vêm as suas equipes; a disputa de 3º lugar fica à parte
+export function rodadasLivre(js) {
+  const by = {}, memo = {}; js.forEach(j => by[j.id] = j);
+  const prof = (j, vis = new Set()) => { if (memo[j.id]) return memo[j.id]; if (vis.has(j.id)) return 1; vis.add(j.id);
+    const fs = ["a", "b"].map(l => origLivre(j.orig && j.orig[l])).filter(Boolean).map(o => by[o.id]).filter(Boolean);
+    return memo[j.id] = fs.length ? 1 + Math.max(...fs.map(x => prof(x, vis))) : 1; };
+  const terc = js.find(j => j.papel === "terceiro") || null, main = js.filter(j => j !== terc);
+  const n = Math.max(0, ...main.map(j => prof(j))), cols = [];
+  for (let d = 1; d <= n; d++) { const c = main.filter(j => prof(j) === d).sort((a, b) => (a.num || 0) - (b.num || 0)); if (c.length) cols.push(c); }
+  const titulos = cols.map((c, i) => {
+    if (c.length === 1 && c[0].papel === "final") return "Final";
+    const rs = [...new Set(c.map(j => j.rotulo || ""))]; if (rs.length === 1 && rs[0]) return rs[0];
+    const prox = cols[i + 1]; if (prox && prox.length === 1 && prox[0].papel === "final" && c.length === 2) return "Semifinal";
+    return (i + 1) + "ª rodada";
+  });
+  return { cols, terc, titulos };
+}
+
 /* ---------- classificação final da etapa e classificação geral ---------- */
 // faixas de colocação de uma chave de mata-mata: campeã, vice, 3º, 4º, depois os eliminados de cada rodada
 function faixasChave(esporte, js, cmp) {

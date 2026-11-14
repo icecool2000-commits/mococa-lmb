@@ -562,8 +562,11 @@ export function montarTorneio(ctx) {
   function rotOrig(cod, lj) { const o = C.origLivre(cod); if (!o) return null; const x = lj.find(y => y.id === o.id); return (o.t === "v" ? "Vencedor" : "Perdedor") + " do Jogo " + (x ? x.num : "?"); }
   function telaLivre(et, js) {
     const lj = js.filter(j => j.fase === "livre").sort((a, b) => (a.num || 0) - (b.num || 0)), ed = podeEditar(), w = h("div", { class: "t-col" });
-    w.append(h("h3", { class: "t-h", text: "Jogos" }));
     if (!lj.length) w.append(h("p", { class: "cap", text: ed ? "Crie os jogos em ordem. Em cada jogo escolha as equipes ou \"Vencedor/Perdedor do Jogo N\", e a data e o horário. Marque qual jogo é a final e qual é a disputa de 3º lugar." : "Os jogos desta etapa ainda não foram cadastrados." }));
+    const ch = chaveLivre(lj); if (ch) w.append(ch);
+    const lista = h("details", { class: "t-card t-jogos t-livre-lista", open: ed || !ch },
+      h("summary", null, "Lista dos jogos" + (ed ? " (equipes, data e horário)" : "") + " · " + lj.filter(j => j.status === "encerrado").length + "/" + lj.length));
+    if (lj.length) w.append(lista);
     lj.forEach(j => {
       const v = { ...j, rotA: rotOrig(j.orig && j.orig.a, lj), rotB: rotOrig(j.orig && j.orig.b, lj) };
       const card = h("div", { class: "t-livre" + (j.papel ? " " + j.papel : "") },
@@ -571,7 +574,7 @@ export function montarTorneio(ctx) {
           ed && h("button", { type: "button", class: "ghost t-mini", "aria-expanded": String(livreEd === j.id), onclick: () => { livreEd = livreEd === j.id ? null : j.id; render(); } }, livreEd === j.id ? "Fechar" : "Editar")),
         cartaoJogo(v));
       if (ed && livreEd === j.id) card.append(editorLivre(et, j, lj));
-      w.append(card);
+      lista.append(card);
     });
     if (ed) w.append(h("div", { class: "t-linha" },
       h("button", { type: "button", onclick: () => novoJogoLivre(et, lj) }, "+ Jogo"),
@@ -579,6 +582,20 @@ export function montarTorneio(ctx) {
     const pod = C.podioLivre(esporte, lj);
     if (lj.some(j => j.papel)) w.append(cartaoPodio("Pódio", pod));
     return w;
+  }
+  // chave desenhada (colunas até a final, como no mata-mata) a partir de "vencedor/perdedor do jogo N"
+  function chaveLivre(lj) {
+    const { cols, terc, titulos } = C.rodadasLivre(lj);
+    if (!cols.length || (cols.length < 2 && !terc)) return null;
+    const v = j => ({ ...j, rotA: rotOrig(j.orig && j.orig.a, lj), rotB: rotOrig(j.orig && j.orig.b, lj) });
+    const slot = j => h("div", { class: "t-slot" }, h("small", { class: "t-slotnum", text: "Jogo " + j.num }), cartaoJogo(v(j), true));
+    const box = h("div", { class: "t-chave" });
+    cols.forEach((c, i) => box.append(h("div", { class: "t-rod" }, h("div", { class: "t-rodtit", text: titulos[i] }), h("div", { class: "t-rodjogos" }, c.map(slot)))));
+    const camp = C.podioLivre(esporte, lj)[0];
+    if (camp) box.append(h("div", { class: "t-rod t-camp" }, h("div", { class: "t-rodtit", text: "Campeã" }), h("div", { class: "t-rodjogos" }, h("div", { class: "t-slot" },
+      h("div", { class: "t-trofeu" }, "🏆", escudoDe(camp) && h("img", { class: "t-esc t-esc-g", src: escudoDe(camp), alt: "" }), h("b", { text: eqNome(camp) }))))));
+    return h("div", { class: "t-col" }, h("h3", { class: "t-h", text: "Chave" }), h("div", { class: "t-chave-wrap" }, box),
+      terc && h("div", { class: "t-terc" }, h("div", { class: "t-rodtit", text: "Jogo " + terc.num + " · " + (terc.rotulo || C.TERCEIRO) }), cartaoJogo(v(terc), true)));
   }
   async function novoJogoLivre(et, lj) {
     const ult = lj[lj.length - 1], num = (ult ? ult.num || lj.length : 0) + 1, id = C.uid("j");

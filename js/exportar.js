@@ -109,7 +109,11 @@ export function montarDados(T, jogos, esporte) {
       const item = j => { const r2 = res(j), fimJ = j.status === "encerrado";
         return { id: j.id, num: numero[j.id], fase: j.faseNome + (quando(j) ? " · " + quando(j) : ""), a: j.a ? nome(j.a) : rotL(j.orig && j.orig.a), b: j.b ? nome(j.b) : rotL(j.orig && j.orig.b), bye: false,
           pa: fimJ ? r2.pa : null, pb: fimJ ? r2.pb : null, sa: BIR && fimJ ? r2.sa : null, sb: BIR && fimJ ? r2.sb : null, venc: fimJ ? nome(r2.venc) : "", sets: BIR && fimJ ? (j.sets || []) : null }; };
-      chaves.push({ titulo: "Jogos", livre: true, rodadas: [livre.map(item)], terceiro: null, podio: livre.some(j => j.papel) ? C.podioLivre(esporte, livre).map(nome) : [], previsto: false });
+      // chave desenhada: colunas pela dependência entre os jogos (vencedor/perdedor do jogo N), com as ligações de cada jogo às suas origens
+      const RL = C.rodadasLivre(livre), pos = {}; RL.cols.forEach((c, ci) => c.forEach((j, k) => pos[j.id] = [ci, k]));
+      const fontes = (j, ci) => ["a", "b"].map(l => C.origLivre(j.orig && j.orig[l])).filter(o => o && pos[o.id] && pos[o.id][0] === ci - 1).map(o => pos[o.id][1]);
+      const desenho = RL.cols.length >= 2 ? RL.cols.map((c, ci) => c.map(j => ({ ...item(j), fase: RL.titulos[ci], fontes: fontes(j, ci) }))) : null;
+      chaves.push({ titulo: "Jogos", livre: true, desenho, rodadas: [livre.filter(j => j !== RL.terc).map(item)], terceiro: RL.terc ? item(RL.terc) : null, podio: livre.some(j => j.papel) ? C.podioLivre(esporte, livre).map(nome) : [], previsto: false });
     }
     series.forEach((sr, si) => {
       const sj = js.filter(j => j.serie === si).sort((a, b) => a.rodada - b.rodada || a.ordem - b.ordem);
@@ -330,10 +334,12 @@ function chavePDF(doc, et, ch, logo, comPlacar) {
       doc.text(doc.splitTextToSize(jg.b || "", colW - sw - 3)[0], x + 2, cy + boxH / 4 + 1.2);
       if (comPlacar && jg.pa != null) { doc.setFont("helvetica", "bold"); doc.setTextColor("#1a1a1a"); doc.text(String(D.BIR ? jg.sa : jg.pa), x + colW - sw / 2, cy - boxH / 4 + 1.2, { align: "center" }); doc.text(String(D.BIR ? jg.sb : jg.pb), x + colW - sw / 2, cy + boxH / 4 + 1.2, { align: "center" }); }
       if (jg.num) { doc.setFont("helvetica", "normal"); doc.setFontSize(6.3); doc.setTextColor("#8a94a0"); doc.text("Jogo " + jg.num, x, by - 1); }
-      if (ri > 0) { // linhas da chave
-        const px = x - gapX, c1 = centros[ri - 1][i * 2], c2 = centros[ri - 1][i * 2 + 1];
-        doc.setDrawColor("#9aa6b2"); doc.setLineWidth(0.3);
-        doc.line(px, c1, px + gapX / 2, c1); doc.line(px, c2, px + gapX / 2, c2); doc.line(px + gapX / 2, c1, px + gapX / 2, c2); doc.line(px + gapX / 2, cy, x, cy);
+      if (ri > 0) { // linhas da chave (jg.fontes = de quais jogos da coluna anterior vêm as equipes; padrão: o par i*2, i*2+1)
+        const px = x - gapX, cs = (jg.fontes || [i * 2, i * 2 + 1]).map(k => centros[ri - 1][k]).filter(c => c != null);
+        if (cs.length) {
+          doc.setDrawColor("#9aa6b2"); doc.setLineWidth(0.3); const mx = px + gapX / 2;
+          cs.forEach(c => doc.line(px, c, mx, c)); doc.line(mx, Math.min(...cs, cy), mx, Math.max(...cs, cy)); doc.line(mx, cy, x, cy);
+        }
       }
     });
   });
@@ -439,7 +445,7 @@ export async function tabelaPDF(T, jogos, esporte, marca) {
       });
     }
     et.chaves.forEach(ch => {
-      const lista = [...ch.rodadas.flat(), ch.terceiro].filter(j => j && !j.bye);
+      const lista = [...ch.rodadas.flat(), ch.terceiro].filter(j => j && !j.bye).sort((p, q) => ch.livre ? (p.num || 0) - (q.num || 0) : 0);
       y = secao(doc, y, ch.titulo + (ch.previsto ? " (chave prevista – preencha à mão)" : ""), logo);
       y = tabela(doc, y, { head: [D.BIR ? ["Jogo", "Fase", "Equipe A", "Set 1", "Set 2", "Tiebreak", "Equipe B", "Vencedor"] : ["Jogo", "Fase", "Equipe A", "Placar", "Equipe B", "Vencedor"]],
         body: lista.map(j => D.BIR ? [j.num, j.fase, j.a, ...(j.sets && j.sets.length ? [0, 1, 2].map(i => j.sets[i] ? j.sets[i].a + " x " + j.sets[i].b : "") : ["____ x ____", "____ x ____", "____ x ____"]), j.b, j.venc] : [j.num, j.fase, j.a, j.pa != null ? j.pa + " x " + j.pb : "____ x ____", j.b, j.venc]),
@@ -456,7 +462,7 @@ export async function tabelaPDF(T, jogos, esporte, marca) {
       y = secao(doc, y, "Classificação final da etapa" + (ft.completa ? "" : " (preencha à mão)"), logo);
       y = tabela(doc, y, { head: [ft.head], body: ft.body, styles: { fontSize: 8.4, minCellHeight: 7, halign: "center", lineColor: "#cfd6de", lineWidth: 0.15 }, columnStyles: { 1: { halign: "left", fontStyle: "bold", cellWidth: 60 }, 2: { halign: "left", cellWidth: 60 } } }, logo);
     }
-    et.chaves.filter(ch => !ch.livre).forEach(ch => chavePDF(doc, et, ch, logo, true));
+    et.chaves.forEach(ch => { if (!ch.livre) chavePDF(doc, et, ch, logo, true); else if (ch.desenho) chavePDF(doc, et, { ...ch, titulo: "Chave", rodadas: ch.desenho }, logo, true); });
   });
   rodapes(doc);
   doc.save(arquivo(T, "tabela-de-jogos.pdf"));
@@ -531,7 +537,7 @@ export async function relatorioPDF(T, jogos, esporte, marca) {
         y = tabela(doc, y, { head: [ft.head], body: ft.body, styles: { fontSize: 8.2, halign: "center", lineColor: "#cfd6de", lineWidth: 0.15 }, columnStyles: { 1: { halign: "left", fontStyle: "bold" }, 2: { halign: "left" } },
           didParseCell: d => { if (d.section === "body" && d.row.index < 3 && d.column.index === 0) { d.cell.styles.fillColor = COR_MED[d.row.index]; d.cell.styles.textColor = "#fff"; } } }, logo); }
     }
-    et.chaves.filter(ch => !ch.livre).forEach(ch => chavePDF(doc, et, ch, logo, true));
+    et.chaves.forEach(ch => { if (!ch.livre) chavePDF(doc, et, ch, logo, true); else if (ch.desenho) chavePDF(doc, et, { ...ch, titulo: "Chave", rodadas: ch.desenho }, logo, true); });
   });
   // atletas por equipe
   doc.addPage("a4", "portrait"); y = cabecalho(doc, logo, T.nome, "Atletas");
@@ -623,7 +629,7 @@ export async function tabelaXLSX(T, jogos, esporte, marca) {
     et.chaves.forEach(ch => {
       tituloSecao(ws, ch.titulo + (ch.previsto ? " (chave prevista – preencha à mão)" : ""), E);
       tabelaXL(ws, D.BIR ? ["Jogo", "Fase", "", "Equipe A", "Set 1", "Set 2", "Tiebreak", "Equipe B", "Sets", "Vencedor"] : ["Jogo", "Fase", "", "Equipe A", "Pts A", "", "", "", "", "", "Pts B", "Equipe B", "Vencedor"],
-        [...ch.rodadas.flat(), ch.terceiro].filter(j => j && !j.bye).map(j => D.BIR ? [j.num, j.fase, "", j.a, ...(j.sets && j.sets.length ? [0, 1, 2].map(i => j.sets[i] ? j.sets[i].a + " x " + j.sets[i].b : "") : ["", "", ""]), j.b, j.sa != null ? j.sa + " x " + j.sb : "", j.venc] : [j.num, j.fase, "", j.a, j.pa ?? "", "", "", "", "", "", j.pb ?? "", j.b, j.venc]), E, { esq: [], negrito: D.BIR ? [3, 7] : [3, 11], altura: 22 });
+        [...ch.rodadas.flat(), ch.terceiro].filter(j => j && !j.bye).sort((p, q) => ch.livre ? (p.num || 0) - (q.num || 0) : 0).map(j => D.BIR ? [j.num, j.fase, "", j.a, ...(j.sets && j.sets.length ? [0, 1, 2].map(i => j.sets[i] ? j.sets[i].a + " x " + j.sets[i].b : "") : ["", "", ""]), j.b, j.sa != null ? j.sa + " x " + j.sb : "", j.venc] : [j.num, j.fase, "", j.a, j.pa ?? "", "", "", "", "", "", j.pb ?? "", j.b, j.venc]), E, { esq: [], negrito: D.BIR ? [3, 7] : [3, 11], altura: 22 });
     });
     if (et.podios.length) {
       tituloSecao(ws, et.podios.some(p => p.serie != null) ? "Medalhas (ouro, prata e bronze)" : "Pódio", E);
