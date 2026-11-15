@@ -50,8 +50,9 @@ service cloud.firestore {
       let w = d.dayOfWeek(); // 1 = segunda ... 7 = domingo
       let ini = d + duration.value(w == 7 ? 13 : 22, 'h');
       let abre = w == 2 ? 57 : (w == 4 ? 48 : 63);
+      // domingo: a lista fica aberta até 10:10 (10 minutos de tolerância depois do início)
       return (w == 2 || w == 4 || w == 7)
-        && request.time < ini
+        && request.time < ini + duration.value(w == 7 ? 10 : 0, 'm')
         && request.time >= ini - duration.value(abre, 'h');
     }
     function basqueteAberto(dia) {
