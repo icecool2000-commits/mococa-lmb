@@ -242,9 +242,17 @@ export function montarTorneio(ctx) {
       const f = h("form", { class: "t-card t-form", onsubmit: async e => {
         e.preventDefault();
         const etapas = T.etapas.map((et, i) => ({ ...et, nome: f.querySelector("#ge-n" + i).value.trim() || et.nome, local: f.querySelector("#ge-l" + i).value.trim(), data: f.querySelector("#ge-d" + i).value, hora: f.querySelector("#ge-h" + i).value, localUnico: f.querySelector("#ge-lu" + i).checked }));
-        await salvarTorneio({ nome: f.querySelector("#ge-nome").value.trim() || T.nome, etapas }); editandoGeral = false; toast("Torneio salvo."); render();
+        const extra = {};
+        if (!BIR) { const q = Number(f.querySelector("#ge-mq").value), p = Number(f.querySelector("#ge-mp").value);
+          if (!(q >= 1 && q <= 30) || !(p >= 1 && p <= 15)) { toast("Quarto entre 1 e 30 minutos; prorrogação entre 1 e 15."); return; }
+          extra.minQuarto = q; extra.minProrrog = p; }
+        await salvarTorneio({ nome: f.querySelector("#ge-nome").value.trim() || T.nome, etapas, ...extra }); editandoGeral = false; toast("Torneio salvo."); render();
       } },
         h("label", { class: "t-lbl" }, "Nome do torneio", h("input", { id: "ge-nome", value: T.nome, maxlength: 60 })),
+        !BIR && h("div", { class: "t-linha t-tempos" },
+          h("label", { class: "t-lbl" }, "Minutos de cada quarto", h("input", { id: "ge-mq", type: "number", min: 1, max: 30, step: 0.5, inputmode: "decimal", value: minQ() })),
+          h("label", { class: "t-lbl" }, "Minutos da prorrogação", h("input", { id: "ge-mp", type: "number", min: 1, max: 15, step: 0.5, inputmode: "decimal", value: minP() }))),
+        !BIR && h("p", { class: "cap", text: "Regra FIBA: quartos de 10 e prorrogação de 5 minutos. Vale para o relógio da súmula, da mesa e da live de todos os jogos deste torneio." }),
         T.etapas.map((et, i) => h("div", { class: "t-etapa-form" },
           h("input", { id: "ge-n" + i, value: et.nome, "aria-label": "Nome da etapa" }),
           h("input", { id: "ge-l" + i, value: et.local || "", placeholder: "Local", "aria-label": "Local" }),
@@ -262,7 +270,7 @@ export function montarTorneio(ctx) {
     }
     w.append(h("div", { class: "t-card" },
       h("div", { class: "t-linha t-entre" }, h("h3", { class: "t-titulo", text: T.nome }), podeEditar() && h("button", { type: "button", class: "ghost", onclick: () => { editandoGeral = true; render(); } }, "Editar")),
-      h("p", { class: "cap", text: T.equipes.length + " equipes · " + T.etapas.length + (T.etapas.length === 1 ? " etapa" : " etapas") + " · " + (BIR ? "melhor de 3 sets (21, 21, 15)" : "4 quartos de 10 min") })));
+      h("p", { class: "cap", text: T.equipes.length + " equipes · " + T.etapas.length + (T.etapas.length === 1 ? " etapa" : " etapas") + " · " + (BIR ? "melhor de 3 sets (21, 21, 15)" : "4 quartos de " + String(minQ()).replace(".", ",") + " min (prorrogação de " + String(minP()).replace(".", ",") + ")") })));
     const demoBtn = podeEditar() && !T.demo && !torneios.some(t => t.demo) ? botaoDemo() : null;
     T.etapas.forEach((et, i) => {
       const js = jogosEtapa(i), fin = js.filter(j => j.status === "encerrado" && !j.wo).length;
@@ -989,9 +997,13 @@ export function montarTorneio(ctx) {
 
   /* ---------- súmula ---------- */
   function abrirSumula(jid) { sumulaJid = jid; sumulaLocal = JSON.parse(JSON.stringify(jogos.find(j => j.id === jid))); modoCorrigir = false; periodoSel = (sumulaLocal && sumulaLocal.mesa && sumulaLocal.mesa.q) || null;
+    if (!BIR) { aplicarTempos(); if (!cron.rodando) cron.rest = BQ.duracaoQ(periodoSel || "1Q"); }
     if (MESA && sumulaLocal && sumulaLocal.mesa) { pararCron(); BQ.pararTudo(); const r = BQ.restaurar(sumulaLocal.mesa); if (r) cron.rest = r.rest; }
     render(); }
   let modoCorrigir = false, ladoSel = "a", somaPlacar = true, periodoSel = null, cron = { rest: 600, rodando: false, t: null };
+  // tempo dos quartos e da prorrogação deste torneio (minutos; padrão 10 e 5)
+  const minQ = () => (T && Number(T.minQuarto) > 0 ? Number(T.minQuarto) : 10), minP = () => (T && Number(T.minProrrog) > 0 ? Number(T.minProrrog) : 5);
+  const aplicarTempos = () => BQ.definirTempos(minQ(), minP());
 
   function salvarSumula(imediato) {
     const j = sumulaLocal; clearTimeout(salvarTimer);
@@ -1168,7 +1180,7 @@ export function montarTorneio(ctx) {
       if (!(MESA && j.mesa)) painel.append(h("div", { class: "t-cron" },
         h("b", { id: "t-cron-v", text: pad(Math.floor(cron.rest / 60)) + ":" + pad(cron.rest % 60) }),
         h("button", { type: "button", class: "ghost t-mini", onclick: () => cron.rodando ? pararCron() : iniciarCron() }, cron.rodando ? "Pausar" : "Iniciar"),
-        h("button", { type: "button", class: "ghost t-mini", onclick: () => { pararCron(); cron.rest = /^P/.test(sel) ? 300 : 600; render(); } }, "Zerar")));
+        h("button", { type: "button", class: "ghost t-mini", onclick: () => { pararCron(); cron.rest = BQ.duracaoQ(sel); render(); } }, "Zerar " + pad(Math.floor(BQ.duracaoQ(sel) / 60)) + ":" + pad(BQ.duracaoQ(sel) % 60))));
       painel.append(h("div", { class: "t-pontos" }, ["a", "b"].map(l => h("div", { class: "t-pcol" },
         h("span", { class: "cap", text: eqNome(j[l]) + " · " + nomeP(sel) }),
         h("b", { class: "t-pnum", text: p[l] }),
@@ -1177,7 +1189,7 @@ export function montarTorneio(ctx) {
       const r = res(j), mata = j.fase === "mata", empatado = r.pa === r.pb;
       const temQ4 = j.periodos.length >= 4;
       painel.append(h("div", { class: "t-linha" },
-        h("button", { type: "button", class: "ghost t-mini", disabled: !(temQ4 && empatado) || j.periodos.some(x => x.n === "BO"), onclick: () => { const n = "P" + (j.periodos.filter(x => /^P/.test(x.n)).length + 1); j.periodos.push({ n, a: 0, b: 0 }); periodoSel = n; cron.rest = 300; salvarSumula(); } }, "+ Prorrogação"),
+        h("button", { type: "button", class: "ghost t-mini", disabled: !(temQ4 && empatado) || j.periodos.some(x => x.n === "BO"), onclick: () => { const n = "P" + (j.periodos.filter(x => /^P/.test(x.n)).length + 1); j.periodos.push({ n, a: 0, b: 0 }); periodoSel = n; cron.rest = BQ.duracaoQ(n); salvarSumula(); } }, "+ Prorrogação"),
         mata && h("button", { type: "button", class: "ghost t-mini", disabled: !(temQ4 && empatado) || j.periodos.some(x => x.n === "BO"), onclick: () => { j.periodos.push({ n: "BO", a: 0, b: 0 }); periodoSel = "BO"; salvarSumula(); toast("Bola de ouro: um ataque para cada; quem pontuar primeiro vence."); } }, "Bola de ouro")));
       painel.append(h("p", { class: "cap", text: "Os pontos (+1, +2, +3) entram no placar do período selecionado. Com os atletas cadastrados, marque pelo atleta para ter as estatísticas; os botões da equipe servem para jogo sem atletas ou para corrigir." }));
     }

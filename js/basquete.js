@@ -35,7 +35,10 @@ export const TIPOS = {
 export const outro = l => (l === "a" ? "b" : "a");
 export const nomeQ = n => !n ? "" : n === "BO" ? "Bola de ouro" : /^P/.test(n) ? "Prorrogação " + n.slice(1) : n.replace("Q", "º quarto");
 export const qFaltas = q => (/^P/.test(q) || q === "BO" ? "4Q" : q); // prorrogação = 4º quarto para a penalidade
-export const duracaoQ = q => (/^P/.test(q) ? 300 : 600);
+// duração dos períodos em segundos (padrão FIBA: quarto 10 min, prorrogação 5 min); cada torneio pode mudar (T.minQuarto / T.minProrrog)
+let TEMPOS = { q: 600, p: 300 };
+export function definirTempos(minQ, minP) { TEMPOS = { q: Math.round((Number(minQ) > 0 ? Number(minQ) : 10) * 60), p: Math.round((Number(minP) > 0 ? Number(minP) : 5) * 60) }; }
+export const duracaoQ = q => (/^P/.test(q) ? TEMPOS.p : TEMPOS.q);
 const ORDEM_Q = ["1Q", "2Q", "3Q", "4Q"];
 const metade = q => (q === "1Q" || q === "2Q" ? "1T" : q === "3Q" || q === "4Q" ? "2T" : q);
 
@@ -247,7 +250,7 @@ export function painel(o) {
       h("div", { class: "chips" }, ["a", "b"].map(l => h("button", { type: "button", "aria-pressed": String(iniF.salto === l), onclick: () => { iniF.salto = l; o.render(); } }, nomes[l]))),
       h("button", { type: "button", disabled: !okN || !iniF.salto, onclick: () => {
         j.mesa = { q: "1Q", ini: { a: [...iniF.a], b: [...iniF.b] }, salto: iniF.salto, ev: [], pend: null };
-        iniF = null; o.cron.definir(600); o.irPeriodo("1Q"); posse.rest = 24; marcarRel(o); o.toast("Mesa pronta. A seta de posse alternada fica com " + nomes[outro(j.mesa.salto)] + "."); o.salvar();
+        iniF = null; o.cron.definir(duracaoQ("1Q")); o.irPeriodo("1Q"); posse.rest = 24; marcarRel(o); o.toast("Mesa pronta. A seta de posse alternada fica com " + nomes[outro(j.mesa.salto)] + "."); o.salvar();
       } }, "Começar o jogo"));
     return w;
   }
@@ -404,13 +407,13 @@ function fimDoQuarto(o, est) {
   const pa = (o.j.periodos || []).reduce((t, p) => t + (p.a || 0), 0), pb = (o.j.periodos || []).reduce((t, p) => t + (p.b || 0), 0);
   pararRelogios(o); posse.rest = 24;
   if (i >= 0 && i < 3) {
-    m.q = ORDEM_Q[i + 1]; o.cron.definir(600); o.irPeriodo(m.q); marcarRel(o);
+    m.q = ORDEM_Q[i + 1]; o.cron.definir(duracaoQ(m.q)); o.irPeriodo(m.q); marcarRel(o);
     o.toast("Fim do " + nomeQ(q) + ". " + (q === "2Q" ? "Intervalo de 15 minutos." : "Intervalo de 2 minutos.") + " Faltas de equipe zeradas. " + (est.seta ? "O " + nomeQ(m.q) + " começa com reposição alternada para " + (est.seta === "a" ? o.nomeA : o.nomeB) + "." : ""));
     o.salvar(); return;
   }
   if (pa === pb) {
     const n = "P" + ((o.j.periodos || []).filter(p => /^P/.test(p.n)).length + 1);
-    m.q = n; o.cron.definir(300); o.irPeriodo(n, true); marcarRel(o);
+    m.q = n; o.cron.definir(duracaoQ(n)); o.irPeriodo(n, true); marcarRel(o);
     o.toast("Empate: prorrogação de 5 minutos (intervalo de 2 min). As faltas de equipe continuam as do 4º quarto." + (est.seta ? " Reposição alternada para " + (est.seta === "a" ? o.nomeA : o.nomeB) + "." : ""));
     o.salvar(); return;
   }
