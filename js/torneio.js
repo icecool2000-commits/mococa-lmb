@@ -472,35 +472,36 @@ export function montarTorneio(ctx) {
     }
     const grp = C.gruposDe(et), temGrupos = grp.length > 0, temMata = js.some(j => j.fase === "mata" && j.serie == null), series = et.series || [], temSeries = series.length > 0;
     if (!temGrupos && !temMata && !temSeries) { w.append(telaSorteio(et)); return w; }
-    const emSeries = et.formato === "series";
+    const emSeries = et.formato === "series", soTodos = et.formato === "todos";
     // grupos
     if (temGrupos) {
-      w.append(h("h3", { class: "t-h", text: "Fase de classificação" }));
+      w.append(h("h3", { class: "t-h", text: soTodos ? "Todos contra todos" : "Fase de classificação" }));
       const grade = h("div", { class: "t-grupos" });
       grp.forEach((g, gi) => {
         const jg = js.filter(j => j.fase === "grupo" && j.grupo === gi);
-        const cl = C.classificacao(esporte, g, jg, eqNome), q = et.classificam || 2;
+        const cl = C.classificacao(esporte, g, jg, eqNome), q = soTodos ? 0 : et.classificam || 2, MEDS = ["🥇", "🥈", "🥉"], acabou = jg.length && jg.every(j => j.status === "encerrado");
         grade.append(h("div", { class: "t-card t-grupo" },
-          h("div", { class: "t-gtit" }, "Grupo " + C.letraGrupo(gi)),
+          h("div", { class: "t-gtit" }, soTodos ? "Classificação" : "Grupo " + C.letraGrupo(gi)),
           h("table", { class: "t-tab" },
             h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l", text: "Equipe" }), PTS() && h("th", { text: "Pts" }), h("th", { text: "J" }), h("th", { text: "V" }), !BIR && h("th", { text: "E" }), h("th", { text: "D" }), h("th", { text: "Saldo" }))),
             h("tbody", null, cl.map((r, i) => h("tr", { class: i < q ? "passa" : "" },
-              h("td", { text: (i + 1) + "º" }), h("td", { class: "l" }, eqTag(r.eid)), PTS() && h("td", { class: "t-pts", text: r.pg }), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }), h("td", { text: (r.saldo > 0 ? "+" : "") + r.saldo })))))));
+              h("td", { text: soTodos && acabou && i < 3 ? MEDS[i] : (i + 1) + "º" }), h("td", { class: "l" }, eqTag(r.eid)), PTS() && h("td", { class: "t-pts", text: r.pg }), h("td", { text: r.j }), h("td", { text: r.v }), !BIR && h("td", { text: r.e }), h("td", { text: r.d }), h("td", { text: (r.saldo > 0 ? "+" : "") + r.saldo })))))));
       });
       w.append(grade);
-      w.append(h("p", { class: "cap", text: (emSeries ? "Em destaque, quem vai para as séries: " + C.SERIES.slice(0, et.classificam || 3).map((s, k) => (k + 1) + "º → " + s).join(", ") + ". " : "Em destaque, quem passa de fase (" + (et.classificam || 2) + (grp.length > 1 ? " por grupo" : "") + "). ") + TXT_CRIT() }));
+      w.append(h("p", { class: "cap", text: soTodos ? "Classificação final pela tabela. " + TXT_CRIT() : (emSeries ? "Em destaque, quem vai para as séries: " + C.SERIES.slice(0, et.classificam || 3).map((s, k) => (k + 1) + "º → " + s).join(", ") + ". " : "Em destaque, quem passa de fase (" + (et.classificam || 2) + (grp.length > 1 ? " por grupo" : "") + "). ") + TXT_CRIT() }));
       grp.forEach((g, gi) => {
         const jg = js.filter(j => j.fase === "grupo" && j.grupo === gi).sort((a, b) => a.rodada - b.rodada || a.ordem - b.ordem);
         const editar = podeEditar();
         w.append(h("details", { class: "t-card t-jogos", open: grp.length <= 2 || !jg.length },
-          h("summary", null, "Jogos do grupo " + C.letraGrupo(gi) + " · " + jg.filter(j => j.status === "encerrado").length + "/" + jg.length),
+          h("summary", null, (soTodos ? "Jogos" : "Jogos do grupo " + C.letraGrupo(gi)) + " · " + jg.filter(j => j.status === "encerrado").length + "/" + jg.length),
           jg.map(j => editar && j.status === "agendado" ? h("div", { class: "t-jogo-ed" }, cartaoJogo(j), h("button", { type: "button", class: "ghost t-mini", "aria-label": "Apagar este jogo", title: "Apagar este jogo", onclick: () => perguntar("Apagar o jogo " + eqNome(j.a) + " x " + eqNome(j.b) + "?", () => deleteDoc(jogoRef(j.id)), "Apagar jogo") }, "×")) : cartaoJogo(j)),
           !jg.length ? h("p", { class: "cap", text: "Nenhum jogo ainda. Escolha os confrontos abaixo." }) : null,
           editar ? formNovoJogoGrupo(et, gi, g, jg) : null));
       });
       const faltam = js.filter(j => j.fase === "grupo" && j.status !== "encerrado").length;
-      if (!temMata && !temSeries) w.append(previsaoFases(et, grp));
-      if (!temMata && !temSeries && podeEditar()) {
+      if (soTodos) { const pt = C.podioTodos(esporte, et, js, eqNome); if (pt) w.append(cartaoPodio("Pódio", pt)); }
+      if (!temMata && !temSeries && !soTodos) w.append(previsaoFases(et, grp));
+      if (!temMata && !temSeries && !soTodos && podeEditar()) {
         const oQue = emSeries ? "as séries" : "o mata-mata";
         w.append(h("div", { class: "t-card" },
           faltam ? h("p", { class: "cap", text: "Faltam " + faltam + (faltam === 1 ? " jogo" : " jogos") + " da classificação para gerar " + oQue + "." }) : h("p", { class: "cap", text: "Classificação encerrada. Gere " + oQue + " com os classificados." }),
@@ -671,6 +672,7 @@ export function montarTorneio(ctx) {
     const lj = js.filter(j => j.fase === "livre");
     if (lj.some(j => j.papel)) out.push({ titulo: "Pódio", p: C.podioLivre(esporte, lj) });
     (et.series || []).forEach((s, si) => out.push({ titulo: C.SERIES[si], serie: si, p: C.podioSerie(esporte, s, js.filter(j => j.serie === si), eqNome) }));
+    const pt = C.podioTodos(esporte, et, js, eqNome); if (pt) out.push({ titulo: "Pódio (todos contra todos)", p: pt });
     return out;
   }
 
@@ -739,7 +741,9 @@ export function montarTorneio(ctx) {
         h("div", { class: "t-linha" }, h("button", { type: "button", onclick: () => gerarMataDireto(etapaSel) }, "Gerar chave automática"), h("button", { type: "button", class: "ghost", onclick: () => abrirMontagemMata(et, etapaSel, true) }, "Montar chave à mão"),
           SERIES_OK && h("button", { type: "button", class: "ghost", onclick: () => abrirMontagemSeries(et, etapaSel) }, "Montar séries Ouro, Prata e Bronze à mão")),
         h("p", { class: "cap", text: "Ou monte jogo por jogo, como numa tabela de fase final: Jogo 1, Jogo 2, \"Vencedor do Jogo 1 x Perdedor do Jogo 2\"... com data e horário de cada jogo." }),
-        h("button", { type: "button", class: "ghost", onclick: () => salvarTorneio({ etapas: T.etapas.map((e, i) => i === etapaSel ? { ...e, formato: "livre", grupos: [], series: [] } : e) }) }, "Montar jogos à mão (Jogo 1, Jogo 2, vencedor/perdedor)")));
+        h("button", { type: "button", class: "ghost", onclick: () => salvarTorneio({ etapas: T.etapas.map((e, i) => i === etapaSel ? { ...e, formato: "livre", grupos: [], series: [] } : e) }) }, "Montar jogos à mão (Jogo 1, Jogo 2, vencedor/perdedor)"),
+        h("p", { class: "cap", text: "Ou pontos corridos: todas as equipes jogam entre si uma vez e a tabela dá a classificação final (sem mata-mata)." }),
+        h("button", { type: "button", class: "ghost", onclick: () => gerarSoTodos(etapaSel) }, "Todos contra todos (sem mata-mata)")));
       return w;
     }
     if (rs.modo === "manual") {
@@ -767,6 +771,13 @@ export function montarTorneio(ctx) {
     return w;
   }
 
+  async function gerarSoTodos(ei) {
+    const ids = T.equipes.map(e => e.id); if (ids.length < 2) { toast("Cadastre pelo menos 2 equipes."); return; }
+    const b = writeBatch(db);
+    C.todosContraTodos(ids).forEach((par, r) => par.forEach(([a, bb], o) => b.set(jogoRef(C.uid("j")), novoJogo({ etapa: ei, fase: "grupo", grupo: 0, rodada: r + 1, ordem: o, a, b: bb, faseNome: "Todos contra todos" }))));
+    b.update(ref(), { etapas: T.etapas.map((e, i) => i === ei ? { ...e, formato: "todos", grupos: C.gruposParaSalvar([ids]), classificam: 0, series: [] } : e) });
+    try { await b.commit(); toast("Jogos de todos contra todos criados."); } catch (e) { console.error(e); toast("Não deu para criar os jogos."); }
+  }
   async function confirmarSorteio(ei, rs) {
     const b = writeBatch(db);
     if (rs.confrontos !== "manual") rs.grupos.forEach((g, gi) => C.todosContraTodos(g).forEach((par, r) => par.forEach(([a, bb], o) => {

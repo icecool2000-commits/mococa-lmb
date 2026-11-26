@@ -339,8 +339,13 @@ export function colocacaoEtapa(esporte, et, js, equipeIds, nomeDe = id => id) {
     if (s.tipo === "todos") classificacao(esporte, s.equipes, sj, nomeDe).forEach((r, k) => add([r.eid], (k + 1) + "º", { serie: si, posSerie: k + 1 }));
     else faixasChave(esporte, sj, cmp).forEach((f, k) => add(f.eqs, f.rot, { serie: si }));
   });
-  // quem não passou dos grupos: pela colocação no grupo e depois pela campanha
+  // só todos contra todos (um grupo, sem mata-mata/séries/chave): a tabela do grupo é a classificação final
   const grupos = gruposDe(et), posG = {};
+  if (grupos.length === 1 && !mj.length && !lj.length && !(et.series || []).length) {
+    const rotP = ["Campeã", "Vice", "3º lugar"];
+    classificacao(esporte, grupos[0], js.filter(j => j.fase === "grupo"), nomeDe).forEach((r, k) => add([r.eid], completa && k < 3 ? rotP[k] : (k + 1) + "º"));
+  }
+  // quem não passou dos grupos: pela colocação no grupo e depois pela campanha
   grupos.forEach((g, gi) => classificacao(esporte, g, js.filter(j => j.fase === "grupo" && j.grupo === gi), nomeDe).forEach((r, k) => posG[r.eid] = k));
   const resto = equipeIds.filter(e => !usados.has(e) && (posG[e] != null || js.some(j => j.a === e || j.b === e)));
   const porPos = {}; resto.forEach(e => (porPos[posG[e] ?? 99] ||= []).push(e));
@@ -356,6 +361,13 @@ export function colocacaoEtapa(esporte, et, js, equipeIds, nomeDe = id => id) {
     ordem.push({ eid, pos, rot: f.rot, serie: f.serie ?? null, medalha: med, ...camp[ic[eid]] });
   }));
   return { completa, ordem };
+}
+
+// pódio de uma etapa só de todos contra todos (um grupo): os 3 primeiros da tabela, quando todos os jogos terminaram
+export function podioTodos(esporte, et, js, nomeDe = id => id) {
+  const g = gruposDe(et), gj = js.filter(j => j.fase === "grupo");
+  if (g.length !== 1 || !gj.length || gj.length !== js.length || gj.some(j => j.status !== "encerrado")) return null;
+  const c = classificacao(esporte, g[0], gj, nomeDe); return [0, 1, 2].map(k => c[k] ? c[k].eid : null);
 }
 
 // Classificação geral do torneio (todas as etapas). Critério padrão: vitórias, empates, saldo, pontos feitos.

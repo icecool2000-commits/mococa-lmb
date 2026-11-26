@@ -140,6 +140,7 @@ export function montarDados(T, jogos, esporte) {
     chaves.sort((a, b) => (a.serie ?? -1) - (b.serie ?? -1));
     chaves.forEach(c => { if (!c.livre || c.podio.length) podios.push({ titulo: c.livre ? "Pódio" : c.titulo, serie: c.serie, p: c.podio }); });
     seriesRR.forEach(sr => podios.push({ titulo: sr.titulo, serie: sr.serie, p: sr.previsto ? [] : C.podioSerie(esporte, { tipo: "todos", equipes: sr.equipes }, sr.jogos, nome).map(nome) }));
+    { const pt = C.podioTodos(esporte, et, js, nome); if (pt) podios.push({ titulo: "Pódio (todos contra todos)", p: pt.map(nome) }); }
     podios.sort((a, b) => (a.serie ?? -1) - (b.serie ?? -1));
     const campea = (podios[0] && podios[0].p[0]) || "";
     return { ...et, idx: ei, grupos, chaves, seriesRR, tabelas: [...grupos, ...seriesRR.sort((a, b) => a.serie - b.serie)], podios, campea, previsto, vazio: !grupos.length && !chaves.length && !seriesRR.length };
